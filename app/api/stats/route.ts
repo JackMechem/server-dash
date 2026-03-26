@@ -1,25 +1,36 @@
-import { execSync } from "child_process";
-import fs from "fs";
+import { exec } from "child_process";
+import { promisify } from "util";
+import fs from "fs/promises";
 import { NextResponse } from "next/server";
 
-function readFile(path: string): string | null {
+const execAsync = promisify(exec);
+
+/**
+ * Helper to read files asynchronously
+ */
+async function readFile(path: string): Promise<string | null> {
   try {
-    return fs.readFileSync(path, "utf8").trim();
+    const data = await fs.readFile(path, "utf8");
+    return data.trim();
   } catch {
     return null;
   }
 }
 
-function exec(cmd: string): string | null {
+/**
+ * Helper to run shell commands asynchronously
+ */
+async function runCommand(cmd: string): Promise<string | null> {
   try {
-    return execSync(cmd, { timeout: 3000 }).toString().trim();
+    const { stdout } = await execAsync(cmd, { timeout: 3000 });
+    return stdout.trim();
   } catch {
     return null;
   }
 }
 
-function getMemory() {
-  const raw = readFile("/proc/meminfo");
+async function getMemory() {
+  const raw = await readFile("/proc/meminfo");
   if (!raw) return null;
   const lines: Record<string, number> = {};
   for (const line of raw.split("\n")) {
@@ -39,10 +50,9 @@ function getMemory() {
   };
 }
 
-function getCpu() {
-  // Take two samples 100ms apart to calculate usage
-  const sample = () => {
-    const raw = readFile("/proc/stat");
+async function getCpu() {
+  const sample = async () => {
+    const raw = await readFile("/proc/stat");
     if (!raw) return null;
     const line = raw.split("\n")[0];
     const parts = line.split(/\s+/).slice(1).map(Number);
@@ -51,9 +61,10 @@ function getCpu() {
     return { idle, total };
   };
 
-  const s1 = sample();
-  execSync("sleep 0.2");
-  const s2 = sample();
+  const s1 = await sample();
+  // Non-blocking delay (200ms) to calculate CPU delta
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  const s2 = await sample();
 
   if (!s1 || !s2) return null;
 
@@ -61,34 +72,30 @@ function getCpu() {
   const totalDiff = s2.total - s1.total;
   const percent = Math.round((1 - idleDiff / totalDiff) * 100);
 
-  const model =
-    exec("grep 'model name' /proc/cpuinfo | head -1 | cut -d: -f2") ??
-    "Unknown";
-  const cores =
-    exec("grep -c '^processor' /proc/cpuinfo") ?? "?";
+  // Parse CPU Info without spawning extra shell processes
+  const cpuInfo = (await readFile("/proc/cpuinfo")) || "";
+  const model = cpuInfo.match(/model name\s+:\s+(.*)/)?.[1] || "Unknown";
+  const cores = cpuInfo.split("\n").filter((l) => l.startsWith("processor")).length;
 
   return {
     percent,
     model: model.trim(),
-    cores: parseInt(cores),
+    cores,
   };
 }
 
-function getTemperature() {
-  // Try common thermal zone paths
+async function getTemperature() {
   const paths = [
     "/sys/class/thermal/thermal_zone0/temp",
     "/sys/class/thermal/thermal_zone1/temp",
     "/sys/class/hwmon/hwmon0/temp1_input",
   ];
   for (const path of paths) {
-    const raw = readFile(path);
-    if (raw) {
-      return Math.round(parseInt(raw) / 1000);
-    }
+    const raw = await readFile(path);
+    if (raw) return Math.round(parseInt(raw) / 1000);
   }
-  // Try sensors command as fallback
-  const sensors = exec("sensors 2>/dev/null | grep 'Core 0' | head -1");
+  
+  const sensors = await runCommand("sensors 2>/dev/null | grep 'Core 0' | head -1");
   if (sensors) {
     const match = sensors.match(/\+(\d+\.\d+)/);
     if (match) return parseFloat(match[1]);
@@ -96,8 +103,8 @@ function getTemperature() {
   return null;
 }
 
-function getDisk() {
-  const raw = exec("df -B1 /");
+async function getDisk() {
+  const raw = await runCommand("df -B1 /");
   if (!raw) return null;
   const lines = raw.split("\n");
   const parts = lines[1].split(/\s+/);
@@ -112,8 +119,8 @@ function getDisk() {
   };
 }
 
-function getUptime() {
-  const raw = readFile("/proc/uptime");
+async function getUptime() {
+  const raw = await readFile("/proc/uptime");
   if (!raw) return null;
   const seconds = parseFloat(raw.split(" ")[0]);
   const days = Math.floor(seconds / 86400);
@@ -122,8 +129,8 @@ function getUptime() {
   return { seconds, days, hours, minutes };
 }
 
-function getNetwork() {
-  const raw = readFile("/proc/net/dev");
+async function getNetwork() {
+  const raw = await readFile("/proc/net/dev");
   if (!raw) return null;
   const ifaces: Record<string, { rx: number; tx: number }> = {};
   for (const line of raw.split("\n").slice(2)) {
@@ -139,17 +146,23 @@ function getNetwork() {
   return ifaces;
 }
 
-function getServices() {
+async function getServices() {
   const services = ["caddy", "syncthing", "sshd", "cloudflare-dyndns"];
   const result: Record<string, string> = {};
-  for (const svc of services) {
-    result[svc] = exec(`systemctl is-active ${svc}`) ?? "unknown";
-  }
+  
+  // Run all status checks in parallel
+  await Promise.all(
+    services.map(async (svc) => {
+      const status = await runCommand(`systemctl is-active ${svc}`);
+      result[svc] = status ?? "unknown";
+    })
+  );
+  
   return result;
 }
 
-function getLoadAverage() {
-  const raw = readFile("/proc/loadavg");
+async function getLoadAverage() {
+  const raw = await readFile("/proc/loadavg");
   if (!raw) return null;
   const parts = raw.split(" ");
   return {
@@ -160,27 +173,33 @@ function getLoadAverage() {
 }
 
 export async function GET() {
-  const [memory, cpu, disk, uptime, network, services, loadAvg, temperature] =
-    await Promise.all([
-      getMemory(),
-      getCpu(),
-      getDisk(),
-      getUptime(),
-      getNetwork(),
-      getServices(),
-      getLoadAverage(),
-      getTemperature(),
-    ]);
+  try {
+    // Parallelize all data gathering
+    const [memory, cpu, disk, uptime, network, services, loadAvg, temperature] =
+      await Promise.all([
+        getMemory(),
+        getCpu(),
+        getDisk(),
+        getUptime(),
+        getNetwork(),
+        getServices(),
+        getLoadAverage(),
+        getTemperature(),
+      ]);
 
-  return NextResponse.json({
-    timestamp: new Date().toISOString(),
-    memory,
-    cpu,
-    disk,
-    uptime,
-    network,
-    services,
-    loadAvg,
-    temperature,
-  });
+    return NextResponse.json({
+      timestamp: new Date().toISOString(),
+      memory,
+      cpu,
+      disk,
+      uptime,
+      network,
+      services,
+      loadAvg,
+      temperature,
+    });
+  } catch (error) {
+    console.error("API Error:", error);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
 }
