@@ -10,22 +10,22 @@ export default function StatsGrid({ stats }: StatsGridProps) {
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 mb-11">
       <StatCard
         label="CPU"
-        value={stats ? `${stats.cpu.percent}%` : "—"}
+        value={stats ? `${stats.cpu.percent.toFixed(1)}%` : "—"}
         sub={stats?.cpu.model.replace(/\(R\)/g, "").replace(/\(TM\)/g, "").trim()}
-        percent={stats?.cpu.percent}
+        percent={stats?.cpu.percent.toFixed(1)}
         delay={0}
       />
       <StatCard
         label="Memory"
-        value={stats ? `${stats.memory.percent}%` : "—"}
-        sub={stats ? `${stats.memory.used} MB / ${stats.memory.total} MB` : ""}
+        value={stats ? `${(stats.memory.percent)}%` : "—"}
+        sub={stats ? `${(stats.memory.used / 1000).toFixed(1)} GB / ${(stats.memory.total / 1000).toFixed(1)} GB` : ""}
         percent={stats?.memory.percent}
         delay={60}
       />
       <StatCard
         label="Disk"
         value={stats ? `${stats.disk.percent}%` : "—"}
-        sub={stats ? `${stats.disk.used} GB / ${stats.disk.total} GB` : ""}
+        sub={stats ? `${(stats.disk.used / 1024).toFixed(1)} GB / ${(stats.disk.total / 1024).toFixed(0)} GB` : ""}
         percent={stats?.disk.percent}
         delay={120}
       />
