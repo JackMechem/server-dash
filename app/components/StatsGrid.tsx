@@ -12,7 +12,7 @@ export default function StatsGrid({ stats }: StatsGridProps) {
         label="CPU"
         value={stats ? `${stats.cpu.percent.toFixed(1)}%` : "—"}
         sub={stats?.cpu.model.replace(/\(R\)/g, "").replace(/\(TM\)/g, "").trim()}
-        percent={stats?.cpu.percent.toFixed(1)}
+        percent={Number(stats?.cpu.percent.toFixed(1))}
         delay={0}
       />
       <StatCard
