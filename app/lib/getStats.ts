@@ -50,6 +50,11 @@ export interface Stats {
 
 export async function getStats(): Promise<Stats> {
 	const res = await fetch("/api/stats");
+
+	if (res.status === 401) {
+		throw new Error("UNAUTHORIZED");
+	}
+
 	if (!res.ok) throw new Error(`Failed to fetch stats: ${res.status}`);
 	return res.json() as Promise<Stats>;
 }

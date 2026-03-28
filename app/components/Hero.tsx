@@ -1,16 +1,43 @@
 "use client";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import { LuSettings2 } from "react-icons/lu";
+import ControlPanel from "./serverMenu";
 
 interface HeroProps {
 	lastUpdated: string | null;
 }
 
 export default function Hero({ lastUpdated }: HeroProps) {
+	const router = useRouter();
+	const [authed, setAuthed] = useState<boolean>(false);
+	const [menuOpen, setMenuOpen] = useState<boolean>(false);
+
+	useEffect(() => {
+		async function checkAuth() {
+			try {
+				const res = await fetch("/api/auth/check");
+				setAuthed(res.ok);
+			} finally {
+			}
+		}
+		checkAuth();
+	}, [router]);
+
 	return (
 		<div className="mb-11 animate-fade-up">
+			{menuOpen &&
+				typeof window !== "undefined" &&
+				createPortal(
+					<ControlPanel onClose={() => setMenuOpen(false)} />,
+					document.body,
+				)}
 			<p className="text-xs font-medium tracking-widest uppercase text-blue-500 mb-3">
 				dell-xps-nixos-serv
 			</p>
-			<div className="flex gap-[10px] items-center">
+			<div className="flex gap-[10px] items-center w-full">
 				<svg
 					className="w-[50px] h-[50px]"
 					xmlns="http://www.w3.org/2000/svg"
@@ -35,6 +62,21 @@ export default function Hero({ lastUpdated }: HeroProps) {
 				>
 					Home server
 				</h1>
+				{authed ? (
+					<div
+						onClick={() => setMenuOpen(true)}
+						className="align-self-end ml-auto px-[20px] py-[20px] rounded-2xl hover:bg-gray-200 cursor-pointer duration-[200ms] text-gray-600 hover:shadow-sm font-[600]"
+					>
+						<LuSettings2 />
+					</div>
+				) : (
+					<div
+						onClick={() => router.push("/auth")}
+						className="align-self-end ml-auto px-[18px] py-[5px] rounded-xl hover:bg-blue-500 shadow-sm bg-white border-blue-300 hover:border-blue-400 border cursor-pointer duration-[200ms] text-blue-400 hover:shadow-sm hover:text-blue-100 text-[11pt] font-[600]"
+					>
+						Authenticate
+					</div>
+				)}
 			</div>
 			<p className="text-sm text-gray-400 font-light">
 				{lastUpdated

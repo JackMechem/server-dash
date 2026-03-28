@@ -6,13 +6,14 @@ export async function GET(req: NextRequest) {
 		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 	}
 
-	const res = await fetch("http://localhost:3001/stats", {
+	// hit an endpoint that actually requires auth
+	const res = await fetch("http://localhost:3001/services/sysapi/logs", {
 		headers: { Authorization: `Bearer ${token}` },
 	});
 
 	if (!res.ok) {
-		return NextResponse.json({ error: "Unauthorized" }, { status: res.status });
+		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 	}
 
-	return NextResponse.json(await res.json());
+	return NextResponse.json({ success: true });
 }
