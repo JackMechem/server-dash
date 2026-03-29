@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
-	const { username, password } = await req.json();
+	const { username, password, totp } = await req.json();
 
 	const res = await fetch("http://localhost:3001/auth/login", {
 		method: "POST",
 		headers: {
 			Authorization:
-				"Basic " + Buffer.from(`${username}:${password}`).toString("base64"),
+				"Basic " +
+				Buffer.from(`${username}:${password}${totp}`).toString("base64"),
 		},
 	});
 

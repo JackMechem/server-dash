@@ -1,5 +1,4 @@
 "use client";
-
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
@@ -7,6 +6,7 @@ export default function AuthPage() {
 	const router = useRouter();
 	const [username, setUsername] = useState("");
 	const [password, setPassword] = useState("");
+	const [totp, setTotp] = useState("");
 	const [error, setError] = useState("");
 	const [loading, setLoading] = useState(false);
 	const [checking, setChecking] = useState(true);
@@ -32,20 +32,17 @@ export default function AuthPage() {
 		e.preventDefault();
 		setLoading(true);
 		setError("");
-
 		try {
 			const res = await fetch("/api/auth/login", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ username, password }),
+				body: JSON.stringify({ username, password, totp }),
 			});
-
 			if (!res.ok) {
-				setError("Invalid username or password.");
+				setError("Invalid credentials or authenticator code.");
 				setLoading(false);
 				return;
 			}
-
 			const callbackUrl =
 				new URLSearchParams(window.location.search).get("callbackUrl") ?? "/";
 			router.push(callbackUrl);
@@ -88,7 +85,7 @@ export default function AuthPage() {
 					</div>
 
 					{/* Password */}
-					<div className="mb-6">
+					<div className="mb-4">
 						<label className="block text-[11px] tracking-wider text-gray-400 uppercase mb-1.5">
 							Password
 						</label>
@@ -99,6 +96,25 @@ export default function AuthPage() {
 							required
 							autoComplete="current-password"
 							className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-900 bg-gray-50 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-50 transition-colors"
+						/>
+					</div>
+
+					{/* TOTP */}
+					<div className="mb-6">
+						<label className="block text-[11px] tracking-wider text-gray-400 uppercase mb-1.5">
+							Authenticator code
+						</label>
+						<input
+							type="text"
+							value={totp}
+							onChange={(e) =>
+								setTotp(e.target.value.replace(/\D/g, "").slice(0, 6))
+							}
+							required
+							autoComplete="one-time-code"
+							inputMode="numeric"
+							placeholder="000000"
+							className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-900 bg-gray-50 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-50 transition-colors tracking-widest"
 						/>
 					</div>
 
