@@ -30,7 +30,7 @@
                     '';
 
                     installPhase = ''
-                        mkdir -p $out
+                        mkdir -p $out/.next
                         cp -r .next/standalone/. $out/
                         cp -r .next/static $out/.next/static
                         cp -r public $out/public
