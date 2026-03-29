@@ -23,7 +23,7 @@
                     pname = "server-dash";
                     version = "0.1.0";
                     src = ./.;
-                    npmDepsHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+                    npmDepsHash = "sha256-jzVH/DKNE6m+RowHku7h3brC6T+a6xjl2SKSXiTmLgM=";
 
                     buildPhase = ''
                         npm run build
