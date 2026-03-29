@@ -1,56 +1,79 @@
 @import "tailwindcss";
 
+@font-face {
+	font-family: "DM Sans";
+	src: url("/fonts/DMSans.woff2") format("woff2");
+	font-display: swap;
+}
+
+@font-face {
+	font-family: "Playfair Display";
+	src: url("/fonts/PlayfairDisplay.woff2") format("woff2");
+	font-display: swap;
+}
+
 :root {
-    --background: #f9fafb;
-    --foreground: #111827;
+	--background: #f9fafb;
+	--foreground: #111827;
+	--font-dm-sans: "DM Sans", sans-serif;
+	--font-playfair: "Playfair Display", serif;
 }
 
 @theme inline {
-    --color-background: var(--background);
-    --color-foreground: var(--foreground);
-    
-    /* Link Tailwind to the Next.js Font Variables */
-    --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui;
-    --font-serif: var(--font-playfair), ui-serif, Georgia;
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+
+	/* Link Tailwind to the Next.js Font Variables */
+	--font-sans: var(--font-dm-sans), ui-sans-serif, system-ui;
+	--font-serif: var(--font-playfair), ui-serif, Georgia;
 }
 
 body {
-    background: var(--background);
-    color: var(--foreground);
-    font-family: var(--font-sans);
-    -webkit-font-smoothing: antialiased;
+	background: var(--background);
+	color: var(--foreground);
+	font-family: var(--font-sans);
+	-webkit-font-smoothing: antialiased;
 }
 
 /* --- Animations --- */
 
 @keyframes fadeUp {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+	from {
+		opacity: 0;
+		transform: translateY(10px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
 }
 
 @keyframes shimmer {
-    from { background-position: 200% 0; }
-    to { background-position: -200% 0; }
+	from {
+		background-position: 200% 0;
+	}
+	to {
+		background-position: -200% 0;
+	}
 }
 
 @keyframes pulse-dot {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.25; }
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.25;
+	}
 }
 
 .animate-fade-up {
-    animation: fadeUp 0.45s ease both;
+	animation: fadeUp 0.45s ease both;
 }
 
 .skeleton {
-    background: linear-gradient(90deg, #f3f4f6 25%, #e9eaec 50%, #f3f4f6 75%);
-    background-size: 200% 100%;
-    animation: shimmer 1.4s infinite;
-    border-radius: 8px;
+	background: linear-gradient(90deg, #f3f4f6 25%, #e9eaec 50%, #f3f4f6 75%);
+	background-size: 200% 100%;
+	animation: shimmer 1.4s infinite;
+	border-radius: 8px;
 }
