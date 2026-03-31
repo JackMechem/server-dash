@@ -4,13 +4,13 @@ import { useState, useEffect } from "react";
 
 const SERVICES = [
 	"syncthing",
-	"dashboard",
+	"server-dash",
 	"caddy",
 	"sshd",
 	"cloudflare-dyndns.timer",
 	"cloudflare-dyndns",
 	"docker",
-	"sysapi",
+	"server-dash-api",
 ];
 
 type Toast = { message: string; ok: boolean } | null;
