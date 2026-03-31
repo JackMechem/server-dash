@@ -81,6 +81,13 @@ export default function ControlPanel({ onClose }: { onClose: () => void }) {
 		showToast(res.ok ? "Rebooting..." : "Reboot failed", res.ok);
 	}
 
+	async function handleShutdown() {
+		if (!confirm("Shut down the server? You will need physical access to turn it back on."))
+			return;
+		const res = await fetch("/api/system/shutdown", { method: "POST" });
+		showToast(res.ok ? "Shutting down..." : "Shutdown failed", res.ok);
+	}
+
 	const isLoading = (service: string, action: string) =>
 		loading[`${service}-${action}`] !== undefined;
 
@@ -202,6 +209,22 @@ export default function ControlPanel({ onClose }: { onClose: () => void }) {
 							Reboot
 						</button>
 					</div>
+				</div>
+				<div className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3.5 flex items-center justify-between mt-2">
+					<div>
+						<p className="text-[14px] text-gray-900 m-0 mb-0.5">
+							Shut down server
+						</p>
+						<p className="text-[12px] text-gray-400 m-0">
+							Powers off the machine
+						</p>
+					</div>
+					<button
+						onClick={handleShutdown}
+						className="border border-red-200 rounded-lg px-3.5 py-1.5 text-[13px] text-red-400 cursor-pointer hover:bg-red-50 transition-colors whitespace-nowrap"
+					>
+						Shut down
+					</button>
 				</div>
 
 				{/* Toast */}

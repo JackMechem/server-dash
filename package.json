@@ -7,7 +7,7 @@
 		"build": "next build",
 		"start": "next start",
 		"lint": "eslint",
-		"deploy": "npm run build && sudo mkdir -p /var/lib/server-dash/build && sudo cp -r .next/standalone/. /var/lib/server-dash/build/ && sudo mkdir -p /var/lib/server-dash/build/.next && sudo cp -r .next/static /var/lib/server-dash/build/.next/static && sudo cp -r public /var/lib/server-dash/build/public && sudo cp .env /var/lib/server-dash/.env && sudo chown -R server-dash:server-dash /var/lib/server-dash && sudo systemctl restart server-dash"
+		"deploy": "npm run build && sudo mkdir -p /var/lib/server-dash/build/.next && sudo cp -r .next/standalone/. /var/lib/server-dash/build/ && sudo cp -r .next/static /var/lib/server-dash/build/.next/static && sudo cp -r public /var/lib/server-dash/build/public && sudo cp .env /var/lib/server-dash/.env && sudo chown -R server-dash:server-dash /var/lib/server-dash && sudo systemctl restart server-dash"
 	},
 	"dependencies": {
 		"next": "16.2.1",

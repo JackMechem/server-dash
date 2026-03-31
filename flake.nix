@@ -17,20 +17,8 @@
                 pkgs = import nixpkgs { inherit system; };
             in
             {
-                packages.default = pkgs.buildNpmPackage {
-                    pname = "server-dash";
-                    version = "0.1.0";
-                    src = ./.;
-                    npmDepsHash = "sha256-jzVH/DKNE6m+RowHku7h3brC6T+a6xjl2SKSXiTmLgM=";
-                    buildPhase = ''
-                        npm run build
-                    '';
-                    installPhase = ''
-                        mkdir -p $out/.next
-                        cp -r .next/standalone/. $out/
-                        cp -r .next/static $out/.next/static
-                        cp -r public $out/public
-                    '';
+                devShells.default = pkgs.mkShell {
+                    buildInputs = with pkgs; [ nodejs ];
                 };
             }
         )
@@ -67,8 +55,11 @@
                                 Type = "simple";
                                 User = "server-dash";
                                 Group = "server-dash";
+                                ExecStartPre = "${pkgs.bash}/bin/bash -c 'test -f ${config.services.server-dash.package}/server.js || (echo \"Build not found, run npm run deploy first\" && exit 1)'";
+                                WorkingDirectory = config.services.server-dash.package;
                                 ExecStart = "${pkgs.nodejs}/bin/node ${config.services.server-dash.package}/server.js";
-                                Restart = "always";
+                                Restart = "on-failure";
+                                RestartSec = "10s";
                                 EnvironmentFile = "/var/lib/server-dash/.env";
                                 Environment = [
                                     "PORT=3000"
