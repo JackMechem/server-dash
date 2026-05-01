@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 export async function POST(req: NextRequest) {
 	const { username, password } = await req.json();
 
-	const res = await fetch("http://localhost:3001/auth/login", {
+	const res = await fetch("http://localhost:3001/auth/register/start", {
 		method: "POST",
 		headers: {
 			Authorization:
@@ -16,6 +16,5 @@ export async function POST(req: NextRequest) {
 		return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
 	}
 
-	// Returns { session_id, challenge } — browser completes the WebAuthn step
 	return NextResponse.json(await res.json());
 }
