@@ -1,0 +1,153 @@
+@import "tailwindcss";
+
+@custom-variant dark-theme (&:where(.dark-theme, .dark-theme *));
+
+@theme {
+  --color-primary: #f0f5fc;
+  --color-secondary: #d9dfe5;
+  --color-blue: #428ce2;
+  --color-green: #5dd776;
+  --color-foreground: #364f6b;
+  --color-foreground-sec: #7b899a;
+
+  --shadow-secondary-center: 0px 0px 10px 9px var(--color-secondary);
+  --shadow-bluexlrr-sm: 3px 3px 0px var(--color-blue);
+
+  --animate-slideInDown: slideInDown 0.1s ease-in-out 1;
+  --animate-page: page 1s ease-in-out 1;
+  --animate-fade-up: fadeUp 0.45s ease both;
+
+  @keyframes slideInDown {
+    0% {
+      transform: translateY(-10px);
+      opacity: 0;
+    }
+    100% {
+      transform: translateY(0px);
+      opacity: 1;
+    }
+  }
+
+  @keyframes page {
+    0% {
+      transform: translateY(-20px);
+      opacity: 0;
+    }
+    100% {
+      transform: translateY(0px);
+      opacity: 1;
+    }
+  }
+
+  @keyframes fadeUp {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes shimmer {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -200% 0;
+    }
+  }
+
+  @keyframes pulse-dot {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.25;
+    }
+  }
+}
+
+.dark-theme {
+  --color-primary: #20232c;
+  --color-secondary: #232a32;
+  --color-foreground: #a1aebd;
+  --color-foreground-sec: #7a9ab2;
+}
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  h1 {
+    font-size: 26px;
+    font-weight: 500;
+  }
+
+  h2 {
+    font-size: 23px;
+    font-weight: 600;
+    line-height: 250%;
+    margin-top: 10px;
+  }
+
+  h3 {
+    font-size: 19px;
+    font-weight: 500;
+  }
+
+  h4 {
+    letter-spacing: 4px;
+    font-weight: 600;
+  }
+
+  p {
+    font-size: 16px;
+    font-weight: 500;
+    line-height: 160%;
+  }
+
+  @media (min-width: 1000px) {
+    h1 {
+      font-size: 36px;
+      font-weight: 500;
+    }
+
+    h3 {
+      font-size: 22px;
+      line-height: 40px;
+      font-weight: 500;
+    }
+
+    p {
+      font-size: 18px;
+      font-weight: 500;
+      line-height: 160%;
+    }
+  }
+}
+
+.animate-fade-up {
+  animation: fadeUp 0.45s ease both;
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-secondary) 25%,
+    var(--color-primary) 50%,
+    var(--color-secondary) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: 8px;
+}

@@ -1,0 +1,6 @@
+# nix
+result
+flake.lock
+
+# secrets
+.env*
