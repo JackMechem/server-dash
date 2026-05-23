@@ -59,6 +59,7 @@
 
                 devShells.frontend = pkgs.mkShell {
                     buildInputs = with pkgs; [ nodejs pnpm ];
+                    NIX_DEV_SHELL = "frontend";
                 };
                 devShells.api = pkgs.mkShell {
                     nativeBuildInputs = apiNativeBuildInputs;
@@ -72,6 +73,7 @@
                     RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
                     TAPO_USERNAME = "mechemjack@gmail.com";
                     TAPO_PASSWORD = "Jackkcaj123$";
+                    NIX_DEV_SHELL = "api";
                     shellHook = ''
                         echo "server-dash-api dev shell ready"
                         echo "   rustc  $(rustc --version)"
@@ -90,6 +92,7 @@
                     RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
                     TAPO_USERNAME = "mechemjack@gmail.com";
                     TAPO_PASSWORD = "Jackkcaj123$";
+                    NIX_DEV_SHELL = "dev";
                     shellHook = ''
                         REPO_ROOT=$(pwd)
                         dev() {
@@ -142,9 +145,9 @@
                                 Type = "simple";
                                 User = "server-dash";
                                 Group = "server-dash";
-                                ExecStartPre = "${pkgs.bash}/bin/bash -c 'test -f ${config.services.server-dash.package}/server.js || (echo \"Build not found, run npm run deploy first\" && exit 1)'";
+                                ExecStartPre = "${pkgs.bash}/bin/bash -c 'test -f ${config.services.server-dash.package}/packages/frontend/server.js || (echo \"Build not found, run pnpm deploy first\" && exit 1)'";
                                 WorkingDirectory = config.services.server-dash.package;
-                                ExecStart = "${pkgs.nodejs}/bin/node ${config.services.server-dash.package}/server.js";
+                                ExecStart = "${pkgs.nodejs}/bin/node ${config.services.server-dash.package}/packages/frontend/server.js";
                                 Restart = "on-failure";
                                 RestartSec = "10s";
                                 EnvironmentFile = "/var/lib/server-dash/.env";
@@ -188,6 +191,7 @@
                         systemd.tmpfiles.rules = [
                             "d /var/lib/server-dash-api 0750 server-dash-api server-dash-api -"
                             "d /var/lib/server-dash-api/webauthn-credentials 0750 server-dash-api server-dash-api -"
+                            "d /var/lib/server-dash-api/totp 0750 server-dash-api server-dash-api -"
                         ];
 
                         security.polkit.extraConfig = ''

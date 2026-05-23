@@ -7,17 +7,19 @@
 		"build": "next build",
 		"start": "next start",
 		"lint": "eslint",
-		"deploy": "pnpm build && sudo rm -rf /var/lib/server-dash/build && sudo mkdir -p /var/lib/server-dash/build/.next && sudo cp -r .next/standalone/. /var/lib/server-dash/build/ && sudo cp -r .next/static /var/lib/server-dash/build/.next/static && sudo cp -r public /var/lib/server-dash/build/public && sudo cp .env /var/lib/server-dash/.env && sudo chown -R server-dash:server-dash /var/lib/server-dash && sudo systemctl restart server-dash"
+		"deploy": "pnpm build && sudo rm -rf /var/lib/server-dash/build && sudo mkdir -p /var/lib/server-dash/build && sudo cp -r .next/standalone/. /var/lib/server-dash/build/ && sudo mkdir -p /var/lib/server-dash/build/packages/frontend/.next && sudo cp -r .next/static /var/lib/server-dash/build/packages/frontend/.next/static && sudo cp -r public /var/lib/server-dash/build/packages/frontend/public && sudo cp .env /var/lib/server-dash/.env && sudo chown -R server-dash:server-dash /var/lib/server-dash && sudo systemctl restart server-dash"
 	},
 	"dependencies": {
 		"@tabler/icons-react": "^3.44.0",
 		"next": "16.2.1",
+		"qrcode": "^1.5.4",
 		"react": "19.2.4",
 		"react-dom": "19.2.4",
 		"react-icons": "^5.6.0",
 		"recharts": "^3.8.1"
 	},
 	"devDependencies": {
+		"@types/qrcode": "^1.5.5",
 		"@tailwindcss/postcss": "^4",
 		"@types/node": "^20",
 		"@types/react": "^19",

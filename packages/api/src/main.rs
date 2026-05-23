@@ -9,6 +9,7 @@ mod auth;
 mod config;
 mod models;
 mod routes;
+mod totp;
 
 #[tokio::main]
 async fn main() {
@@ -56,6 +57,7 @@ async fn main() {
             "/users/{username}/credentials/{cred_id}",
             delete(routes::users::delete_credential),
         )
+        .route("/users/{username}/totp", delete(totp::delete_totp))
         .route("/power/{device}/on", post(routes::power::power_on))
         .route("/power/{device}/off", post(routes::power::power_off))
         .route(
@@ -85,8 +87,17 @@ async fn main() {
         .route("/power/history", get(routes::power::get_power_history))
         .route("/auth/login", post(auth::post_login))
         .route("/auth/verify", post(auth::post_verify))
+        .route("/auth/verify-totp", post(auth::post_verify_totp))
         .route("/auth/register/start", post(auth::post_register_start))
         .route("/auth/register/finish", post(auth::post_register_finish))
+        .route(
+            "/users/{username}/totp/setup",
+            post(totp::post_totp_setup),
+        )
+        .route(
+            "/users/{username}/totp/confirm",
+            post(totp::post_totp_confirm),
+        )
         .merge(protected)
         .with_state(state)
         .layer(Extension(device_cache))

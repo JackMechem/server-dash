@@ -31,5 +31,6 @@ tokio = { version = "1.50.0", features = [
 tapo = "0.9.0"
 zbus = "5.14.0"
 webauthn-rs = "0.5"
+totp-rs = { version = "5", features = ["gen_secret"] }
 url = "2"
 uuid = { version = "1", features = ["v4", "serde"] }

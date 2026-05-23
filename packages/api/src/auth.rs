@@ -39,6 +39,7 @@ pub struct AppState {
     pub webauthn: Webauthn,
     pending_auth: Mutex<HashMap<String, (SecurityKeyAuthentication, Instant, String)>>,
     pending_reg: Mutex<HashMap<String, (SecurityKeyRegistration, Instant, String, Uuid)>>,
+    pending_totp: Mutex<HashMap<String, (Instant, String)>>,
 }
 
 impl AppState {
@@ -53,6 +54,7 @@ impl AppState {
             webauthn,
             pending_auth: Mutex::new(HashMap::new()),
             pending_reg: Mutex::new(HashMap::new()),
+            pending_totp: Mutex::new(HashMap::new()),
         }
     }
 }
@@ -148,7 +150,7 @@ pub fn decode_basic_auth(headers: &HeaderMap) -> Option<(String, String)> {
     Some((user.to_string(), password.to_string()))
 }
 
-fn verify_password(username: &str, password: &str) -> bool {
+pub(crate) fn verify_password(username: &str, password: &str) -> bool {
     let shadow_content = match std::fs::read_to_string("/etc/shadow") {
         Ok(c) => c,
         Err(e) => {
@@ -219,7 +221,7 @@ pub async fn require_auth(headers: HeaderMap, request: Request<Body>, next: Next
     }
 }
 
-// POST /auth/login — verifies password, returns a WebAuthn challenge for the YubiKey
+// POST /auth/login — verifies password, returns WebAuthn challenge and/or TOTP flag
 pub async fn post_login(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -236,39 +238,60 @@ pub async fn post_login(
         return (StatusCode::UNAUTHORIZED, "Invalid credentials").into_response();
     }
 
-    let stored = match load_credentials(&username) {
-        Some(s) => s,
-        None => {
-            return (StatusCode::UNAUTHORIZED, "No YubiKey registered for this user")
-                .into_response()
-        }
-    };
+    let stored_webauthn = load_credentials(&username);
+    let has_totp = crate::totp::has_totp(&username);
 
-    println!("Authentication: {} credential(s) found for {}", stored.credentials.len(), username);
-
-    let (rcr, auth_state) = match state
-        .webauthn
-        .start_securitykey_authentication(&stored.credentials)
-    {
-        Ok(r) => r,
-        Err(e) => {
-            println!("WebAuthn start auth error: {:?}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, "WebAuthn error").into_response();
-        }
-    };
-
-    let session_id = generate_session_id();
-    {
-        let mut pending = state.pending_auth.lock().unwrap();
-        pending.retain(|_, (_, t, _)| t.elapsed() < CHALLENGE_TTL);
-        pending.insert(session_id.clone(), (auth_state, Instant::now(), username));
+    if stored_webauthn.is_none() && !has_totp {
+        return (StatusCode::UNAUTHORIZED, "No 2FA method registered for this user")
+            .into_response();
     }
 
+    let session_id = generate_session_id();
+
+    if has_totp {
+        let mut pending = state.pending_totp.lock().unwrap();
+        pending.retain(|_, (t, _)| t.elapsed() < CHALLENGE_TTL);
+        pending.insert(session_id.clone(), (Instant::now(), username.clone()));
+    }
+
+    if let Some(stored) = stored_webauthn {
+        println!("Authentication: {} credential(s) found for {}", stored.credentials.len(), username);
+
+        let (rcr, auth_state) = match state
+            .webauthn
+            .start_securitykey_authentication(&stored.credentials)
+        {
+            Ok(r) => r,
+            Err(e) => {
+                println!("WebAuthn start auth error: {:?}", e);
+                return (StatusCode::INTERNAL_SERVER_ERROR, "WebAuthn error").into_response();
+            }
+        };
+
+        {
+            let mut pending = state.pending_auth.lock().unwrap();
+            pending.retain(|_, (_, t, _)| t.elapsed() < CHALLENGE_TTL);
+            pending.insert(session_id.clone(), (auth_state, Instant::now(), username));
+        }
+
+        return (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "session_id": session_id,
+                "challenge": rcr,
+                "has_totp": has_totp,
+            })),
+        )
+            .into_response();
+    }
+
+    // TOTP only — no WebAuthn credentials
     (
         StatusCode::OK,
         Json(serde_json::json!({
             "session_id": session_id,
-            "challenge": rcr,
+            "challenge": null,
+            "has_totp": true,
         })),
     )
         .into_response()
@@ -312,6 +335,37 @@ pub async fn post_verify(
         }
         save_credentials(&username, &stored).ok();
     }
+
+    let token = create_token(&username);
+    (StatusCode::OK, Json(serde_json::json!({ "token": token }))).into_response()
+}
+
+#[derive(Deserialize)]
+pub struct VerifyTotpRequest {
+    session_id: String,
+    code: String,
+}
+
+// POST /auth/verify-totp — verifies a TOTP code and issues a JWT
+pub async fn post_verify_totp(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<VerifyTotpRequest>,
+) -> impl IntoResponse {
+    let username = {
+        let mut pending = state.pending_totp.lock().unwrap();
+        match pending.remove(&body.session_id) {
+            Some((created, u)) if created.elapsed() < CHALLENGE_TTL => u,
+            Some(_) => return (StatusCode::UNAUTHORIZED, "Session expired").into_response(),
+            None => return (StatusCode::UNAUTHORIZED, "Invalid session").into_response(),
+        }
+    };
+
+    if !crate::totp::verify_totp_code(&username, &body.code) {
+        return (StatusCode::UNAUTHORIZED, "Invalid TOTP code").into_response();
+    }
+
+    // Invalidate any concurrent WebAuthn session for the same session_id
+    state.pending_auth.lock().unwrap().remove(&body.session_id);
 
     let token = create_token(&username);
     (StatusCode::OK, Json(serde_json::json!({ "token": token }))).into_response()

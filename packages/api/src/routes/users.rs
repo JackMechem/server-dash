@@ -1,8 +1,10 @@
 use axum::{extract::Path, http::StatusCode, response::IntoResponse, response::Json};
 use base64::{Engine, engine::general_purpose};
 use serde::Serialize;
+use std::collections::HashSet;
 
 use crate::auth::{load_credentials, save_credentials, CREDENTIAL_DIR};
+use crate::totp::{has_totp, TOTP_DIR};
 
 #[derive(Serialize)]
 struct CredentialInfo {
@@ -13,6 +15,7 @@ struct CredentialInfo {
 struct UserInfo {
     username: String,
     credentials: Vec<CredentialInfo>,
+    has_totp: bool,
 }
 
 #[derive(Serialize)]
@@ -20,33 +23,46 @@ struct UsersResponse {
     users: Vec<UserInfo>,
 }
 
-pub async fn list_users() -> impl IntoResponse {
-    let dir = std::path::Path::new(CREDENTIAL_DIR);
+fn json_stems(dir: &str) -> HashSet<String> {
     let Ok(entries) = std::fs::read_dir(dir) else {
-        return Json(UsersResponse { users: vec![] }).into_response();
+        return HashSet::new();
     };
-
-    let mut users: Vec<UserInfo> = entries
+    entries
         .flatten()
-        .filter_map(|entry| {
-            let path = entry.path();
-            if path.extension()?.to_str() != Some("json") {
+        .filter_map(|e| {
+            let p = e.path();
+            if p.extension()?.to_str() != Some("json") {
                 return None;
             }
-            let username = path.file_stem()?.to_str()?.to_string();
-            let stored = load_credentials(&username)?;
-            let credentials = stored
-                .credentials
-                .iter()
-                .map(|c| CredentialInfo {
-                    id: general_purpose::URL_SAFE_NO_PAD.encode(c.cred_id()),
+            Some(p.file_stem()?.to_str()?.to_string())
+        })
+        .collect()
+}
+
+pub async fn list_users() -> impl IntoResponse {
+    let webauthn_users = json_stems(CREDENTIAL_DIR);
+    let totp_users = json_stems(TOTP_DIR);
+    let mut all_usernames: Vec<String> = webauthn_users.union(&totp_users).cloned().collect();
+    all_usernames.sort();
+
+    let users: Vec<UserInfo> = all_usernames
+        .into_iter()
+        .map(|username| {
+            let credentials = load_credentials(&username)
+                .map(|s| {
+                    s.credentials
+                        .iter()
+                        .map(|c| CredentialInfo {
+                            id: general_purpose::URL_SAFE_NO_PAD.encode(c.cred_id()),
+                        })
+                        .collect()
                 })
-                .collect();
-            Some(UserInfo { username, credentials })
+                .unwrap_or_default();
+            let has_totp = has_totp(&username);
+            UserInfo { username, credentials, has_totp }
         })
         .collect();
 
-    users.sort_by(|a, b| a.username.cmp(&b.username));
     Json(UsersResponse { users }).into_response()
 }
 
