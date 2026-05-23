@@ -1,7 +1,7 @@
 use axum::extract::Extension;
 use axum::middleware;
 use axum::response::Redirect;
-use axum::{Router, routing::delete, routing::get, routing::post};
+use axum::{Router, routing::delete, routing::get, routing::post, routing::put};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -56,6 +56,10 @@ async fn main() {
         .route(
             "/users/{username}/credentials/{cred_id}",
             delete(routes::users::delete_credential),
+        )
+        .route(
+            "/users/{username}/credentials/{cred_id}/label",
+            put(routes::users::rename_credential),
         )
         .route("/users/{username}/totp", delete(totp::delete_totp))
         .route("/power/{device}/on", post(routes::power::power_on))

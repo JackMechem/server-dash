@@ -17,6 +17,20 @@ export async function POST(req: NextRequest) {
 		return NextResponse.json({ error: text }, { status: 401 });
 	}
 
-	// Returns { session_id, challenge } — browser completes the WebAuthn step
-	return NextResponse.json(await res.json());
+	const data = await res.json();
+
+	// No 2FA registered — token is returned directly, set cookie immediately
+	if (data.token) {
+		const response = NextResponse.json({ no_2fa: true });
+		response.cookies.set("token", data.token, {
+			httpOnly: true,
+			secure: true,
+			sameSite: "strict",
+			maxAge: 60 * 60 * 8,
+			path: "/",
+		});
+		return response;
+	}
+
+	return NextResponse.json(data);
 }

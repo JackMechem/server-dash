@@ -1,14 +1,18 @@
 export type PanelId =
 	| "dashboard"
-	| "analytics-line"
-	| "analytics-bar"
-	| "analytics-candle";
+	| "analytics-past"
+	| "analytics-live"
+	| "summary-cost"
+	| "summary-power"
+	| "summary-energy";
 
 export const PANEL_LABELS: Record<PanelId, string> = {
 	dashboard:           "Dashboard",
-	"analytics-line":    "Power Analytics — Line",
-	"analytics-bar":     "Power Analytics — Bar",
-	"analytics-candle":  "Power Analytics — Candlestick",
+	"analytics-past":    "Power Analytics — Past Data",
+	"analytics-live":    "Power Analytics — Live Data",
+	"summary-cost":      "Electricity Cost",
+	"summary-power":     "Power Draw",
+	"summary-energy":    "Energy Usage",
 };
 
 // ── Sidebar sections ──────────────────────────────────────────────────────────
@@ -21,9 +25,11 @@ export const PANEL_SECTIONS: PanelSection[] = [
 		id: "power-analytics",
 		label: "Power Analytics",
 		items: [
-			{ panelId: "analytics-line",   label: "Line Chart" },
-			{ panelId: "analytics-bar",    label: "Bar Chart" },
-			{ panelId: "analytics-candle", label: "Candlestick" },
+			{ panelId: "analytics-past", label: "Past Data" },
+			{ panelId: "analytics-live", label: "Live Data" },
+			{ panelId: "summary-cost",   label: "Cost" },
+			{ panelId: "summary-power",  label: "Power" },
+			{ panelId: "summary-energy", label: "Energy" },
 		],
 	},
 ];

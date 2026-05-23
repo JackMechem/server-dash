@@ -260,15 +260,19 @@ export default function DashboardPanel({ isAuthed }: { isAuthed: boolean }) {
 
 				{/* Mini charts */}
 				<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
-					{(["line", "bar", "candle"] as const).map((type) => (
+					{([
+						{ type: "line" as const, label: "Line" },
+						{ type: "bar" as const, label: "Bar" },
+						{ type: "candle" as const, label: "Candlestick" },
+					]).map(({ type, label }) => (
 						<div key={type} style={{ border: "1px solid var(--color-secondary)", borderRadius: 12, overflow: "hidden", height: 220 }}>
 							<div style={{ padding: "10px 14px 6px", borderBottom: "1px solid color-mix(in srgb, var(--color-secondary) 60%, transparent)" }}>
 								<p style={{ fontSize: "9pt", fontWeight: 600, color: "var(--color-foreground-sec)", margin: 0 }}>
-									{type === "line" ? "Line" : type === "bar" ? "Bar" : "Candlestick"}
+									{label}
 								</p>
 							</div>
 							<div style={{ height: "calc(100% - 37px)" }}>
-								<AnalyticsPanel key={hours} chartType={type} readOnly defaultHours={hours} />
+								<AnalyticsPanel mode="past" readOnly defaultHours={hours} />
 							</div>
 						</div>
 					))}

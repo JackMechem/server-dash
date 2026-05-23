@@ -1,6 +1,6 @@
 use axum::{extract::Path, http::StatusCode, response::IntoResponse, response::Json};
 use base64::{Engine, engine::general_purpose};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 use crate::auth::{load_credentials, save_credentials, CREDENTIAL_DIR};
@@ -9,6 +9,7 @@ use crate::totp::{has_totp, TOTP_DIR};
 #[derive(Serialize)]
 struct CredentialInfo {
     id: String,
+    label: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -52,8 +53,10 @@ pub async fn list_users() -> impl IntoResponse {
                 .map(|s| {
                     s.credentials
                         .iter()
-                        .map(|c| CredentialInfo {
-                            id: general_purpose::URL_SAFE_NO_PAD.encode(c.cred_id()),
+                        .map(|c| {
+                            let id = general_purpose::URL_SAFE_NO_PAD.encode(c.cred_id());
+                            let label = s.labels.get(&id).cloned();
+                            CredentialInfo { id, label }
                         })
                         .collect()
                 })
@@ -84,6 +87,43 @@ pub async fn delete_credential(
 
     if stored.credentials.len() == original_len {
         return (StatusCode::NOT_FOUND, "Credential not found").into_response();
+    }
+
+    if let Err(e) = save_credentials(&username, &stored) {
+        eprintln!("Failed to save credentials for {}: {}", username, e);
+        return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to save changes").into_response();
+    }
+
+    Json(serde_json::json!({ "success": true })).into_response()
+}
+
+#[derive(Deserialize)]
+pub struct RenameLabelBody {
+    label: String,
+}
+
+pub async fn rename_credential(
+    Path((username, cred_id)): Path<(String, String)>,
+    Json(body): Json<RenameLabelBody>,
+) -> impl IntoResponse {
+    let Some(mut stored) = load_credentials(&username) else {
+        return (StatusCode::NOT_FOUND, "User not found").into_response();
+    };
+
+    let exists = stored
+        .credentials
+        .iter()
+        .any(|c| general_purpose::URL_SAFE_NO_PAD.encode(c.cred_id()) == cred_id);
+
+    if !exists {
+        return (StatusCode::NOT_FOUND, "Credential not found").into_response();
+    }
+
+    let label = body.label.trim().to_string();
+    if label.is_empty() {
+        stored.labels.remove(&cred_id);
+    } else {
+        stored.labels.insert(cred_id, label);
     }
 
     if let Err(e) = save_credentials(&username, &stored) {

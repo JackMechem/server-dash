@@ -11,7 +11,7 @@ import WindowPane from "./WindowPane";
 
 // ── Persistence ───────────────────────────────────────────────────────────────
 
-const STORAGE_KEY = "wm-layout-v3";
+const STORAGE_KEY = "wm-layout-v4";
 const DEFAULT_TREE: TileNode = { type: "leaf", id: "root", panelId: "dashboard" };
 
 function persist(t: TileNode) {

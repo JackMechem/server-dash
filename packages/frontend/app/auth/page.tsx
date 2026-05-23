@@ -72,7 +72,17 @@ export default function AuthPage() {
 				return;
 			}
 
-			const { session_id, challenge, has_totp } = await loginRes.json();
+			const data = await loginRes.json();
+
+			// No 2FA registered — token already set as cookie by the API route
+			if (data.no_2fa) {
+				const callbackUrl =
+					new URLSearchParams(window.location.search).get("callbackUrl") ?? "/";
+				router.push(callbackUrl);
+				return;
+			}
+
+			const { session_id, challenge, has_totp } = data;
 			setSessionId(session_id);
 			setHasTotpFallback(!!has_totp);
 

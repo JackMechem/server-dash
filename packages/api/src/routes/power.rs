@@ -188,6 +188,8 @@ pub async fn record_snapshot(history: &PowerHistory, cache: &TapoDeviceCache) {
 pub struct HistoryQuery {
     #[serde(default = "default_hours")]
     pub hours: u32,
+    pub start: Option<String>,
+    pub end: Option<String>,
 }
 fn default_hours() -> u32 {
     24
@@ -197,14 +199,20 @@ pub async fn get_power_history(
     Extension(history): Extension<PowerHistory>,
     Query(params): Query<HistoryQuery>,
 ) -> impl IntoResponse {
-    let hours = params.hours.max(1).min(24 * 60) as i64;
-    let cutoff = (chrono::Utc::now() - chrono::Duration::hours(hours)).to_rfc3339();
+    let (start_ts, end_ts) = if let (Some(start), Some(end)) = (&params.start, &params.end) {
+        (start.clone(), end.clone())
+    } else {
+        let hours = params.hours.max(1).min(24 * 60) as i64;
+        let end = chrono::Utc::now().to_rfc3339();
+        let start = (chrono::Utc::now() - chrono::Duration::hours(hours)).to_rfc3339();
+        (start, end)
+    };
 
     let guard = history.lock().await;
     let readings: Vec<&models::PowerHistoryEntry> =
-        guard.iter().filter(|e| e.ts >= cutoff).collect();
+        guard.iter().filter(|e| e.ts >= start_ts && e.ts <= end_ts).collect();
 
-    Json(serde_json::json!({ "readings": readings, "hours": hours })).into_response()
+    Json(serde_json::json!({ "readings": readings })).into_response()
 }
 
 async fn query_device(

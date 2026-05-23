@@ -12,6 +12,8 @@ import {
 	IconPlus,
 	IconShieldCheck,
 	IconShieldOff,
+	IconPencil,
+	IconCheck,
 } from "@tabler/icons-react";
 
 function b64uToBuf(b64u: string): ArrayBuffer {
@@ -31,6 +33,7 @@ function bufToB64u(buf: ArrayBuffer): string {
 
 interface Credential {
 	id: string;
+	label?: string;
 	created_at?: string;
 }
 
@@ -68,9 +71,15 @@ export default function UsersPage() {
 	// WebAuthn enrollment
 	const [enrollType, setEnrollType] = useState<EnrollType>("security-key");
 	const [enrollPassword, setEnrollPassword] = useState("");
+	const [enrollLabel, setEnrollLabel] = useState("");
 	const [enrollStatus, setEnrollStatus] = useState<EnrollStatus>("idle");
 	const [enrollMessage, setEnrollMessage] = useState("");
 	const [deletingId, setDeletingId] = useState<string | null>(null);
+
+	// Credential label editing
+	const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
+	const [editingLabelValue, setEditingLabelValue] = useState("");
+	const [savingLabelId, setSavingLabelId] = useState<string | null>(null);
 
 	// TOTP
 	const [totpStep, setTotpStep] = useState<TotpStep>("idle");
@@ -121,8 +130,11 @@ export default function UsersPage() {
 	const selectUser = (user: User) => {
 		setSelected(user);
 		setEnrollPassword("");
+		setEnrollLabel("");
 		setEnrollStatus("idle");
 		setEnrollMessage("");
+		setEditingLabelId(null);
+		setEditingLabelValue("");
 		setTotpStep("idle");
 		setTotpPassword("");
 		setTotpSecret("");
@@ -139,6 +151,19 @@ export default function UsersPage() {
 			method: "DELETE",
 		});
 		setDeletingId(null);
+		await fetchUsers();
+	};
+
+	const saveLabel = async (credId: string) => {
+		if (!selected) return;
+		setSavingLabelId(credId);
+		await fetch(`/api/users/${selected.username}/credentials/${credId}`, {
+			method: "PUT",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ label: editingLabelValue }),
+		});
+		setSavingLabelId(null);
+		setEditingLabelId(null);
 		await fetchUsers();
 	};
 
@@ -214,6 +239,7 @@ export default function UsersPage() {
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
 					session_id,
+					label: enrollLabel.trim() || null,
 					credential: {
 						id: cred.id,
 						rawId: bufToB64u(cred.rawId),
@@ -239,6 +265,7 @@ export default function UsersPage() {
 				enrollType === "passkey" ? "Passkey enrolled successfully." : "YubiKey enrolled successfully.",
 			);
 			setEnrollPassword("");
+			setEnrollLabel("");
 			await fetchUsers();
 		} catch {
 			setEnrollMessage("Something went wrong. Try again.");
@@ -349,34 +376,89 @@ export default function UsersPage() {
 					</div>
 				) : (
 					<div className="flex flex-col gap-[5px]">
-						{user.credentials.map((cred) => (
-							<div key={cred.id} className="flex items-center gap-[10px] px-[12px] py-[9px] rounded-xl bg-secondary/30 group">
-								<IconKey size={13} className="text-blue shrink-0" />
-								<div className="flex flex-col gap-[1px] flex-1 min-w-0">
-									<span className="text-[12px] font-mono text-foreground truncate">
-										{truncId(cred.id)}
-									</span>
-									{fmtDate(cred.created_at) && (
-										<span className="text-[10px] text-foreground-sec">
-											{fmtDate(cred.created_at)}
-										</span>
+						{user.credentials.map((cred) => {
+							const isEditing = editingLabelId === cred.id;
+							const isSaving = savingLabelId === cred.id;
+							return (
+								<div key={cred.id} className="flex items-center gap-[10px] px-[12px] py-[11px] rounded-xl bg-secondary/30 group">
+									<IconKey size={13} className="text-blue shrink-0" />
+									<div className="flex flex-col gap-[1px] flex-1 min-w-0">
+										{isEditing ? (
+											<form
+												onSubmit={(e) => { e.preventDefault(); saveLabel(cred.id); }}
+												className="flex items-center gap-[6px]"
+											>
+												<input
+													autoFocus
+													type="text"
+													value={editingLabelValue}
+													onChange={(e) => setEditingLabelValue(e.target.value)}
+													placeholder="Name this credential…"
+													maxLength={64}
+													disabled={isSaving}
+													className="flex-1 min-w-0 px-[8px] py-[3px] bg-secondary border border-blue/40 rounded-lg text-[12px] text-foreground outline-none focus:border-blue/70 transition-colors"
+												/>
+												<button
+													type="submit"
+													disabled={isSaving}
+													className="p-[8px] lg:p-[4px] rounded-[6px] text-blue hover:bg-blue/10 transition-colors cursor-pointer disabled:opacity-50 shrink-0"
+												>
+													{isSaving ? (
+														<span className="w-[12px] h-[12px] border-2 border-current border-t-transparent rounded-full inline-block animate-spin" />
+													) : (
+														<IconCheck size={12} />
+													)}
+												</button>
+												<button
+													type="button"
+													disabled={isSaving}
+													onClick={() => setEditingLabelId(null)}
+													className="p-[8px] lg:p-[4px] rounded-[6px] text-foreground-sec hover:text-foreground hover:bg-secondary/70 transition-colors cursor-pointer shrink-0"
+												>
+													<IconX size={12} />
+												</button>
+											</form>
+										) : (
+											<>
+												<span className={`text-[12px] truncate ${cred.label ? "text-foreground font-medium" : "text-foreground-sec font-mono"}`}>
+													{cred.label ?? truncId(cred.id)}
+												</span>
+												{cred.label && (
+													<span className="text-[10px] text-foreground-sec font-mono truncate">
+														{truncId(cred.id)}
+													</span>
+												)}
+											</>
+										)}
+									</div>
+									{!isEditing && (
+										<HelpTooltip text="Rename this credential.">
+											<button
+												onClick={() => { setEditingLabelId(cred.id); setEditingLabelValue(cred.label ?? ""); }}
+												className="p-[8px] lg:p-[5px] rounded-[7px] text-foreground-sec hover:text-blue hover:bg-blue/10 transition-colors lg:opacity-0 lg:group-hover:opacity-100 cursor-pointer shrink-0"
+											>
+												<IconPencil size={14} />
+											</button>
+										</HelpTooltip>
+									)}
+									{!isEditing && (
+										<HelpTooltip text="Remove this credential. The user will no longer be able to log in with it.">
+											<button
+												onClick={() => deleteCredential(cred.id)}
+												disabled={deletingId === cred.id}
+												className="p-[8px] lg:p-[5px] rounded-[7px] text-foreground-sec hover:text-red-400 hover:bg-red-400/10 transition-colors lg:opacity-0 lg:group-hover:opacity-100 cursor-pointer disabled:opacity-50 shrink-0"
+											>
+												{deletingId === cred.id ? (
+													<span className="w-[13px] h-[13px] border-2 border-current border-t-transparent rounded-full inline-block animate-spin" />
+												) : (
+													<IconTrash size={13} />
+												)}
+											</button>
+										</HelpTooltip>
 									)}
 								</div>
-								<HelpTooltip text="Remove this credential. The user will no longer be able to log in with it.">
-									<button
-										onClick={() => deleteCredential(cred.id)}
-										disabled={deletingId === cred.id}
-										className="p-[5px] rounded-[7px] text-foreground-sec hover:text-red-400 hover:bg-red-400/10 transition-colors opacity-0 group-hover:opacity-100 cursor-pointer disabled:opacity-50 shrink-0"
-									>
-										{deletingId === cred.id ? (
-											<span className="w-[13px] h-[13px] border-2 border-current border-t-transparent rounded-full inline-block animate-spin" />
-										) : (
-											<IconTrash size={13} />
-										)}
-									</button>
-								</HelpTooltip>
-							</div>
-						))}
+							);
+						})}
 					</div>
 				)}
 			</div>
@@ -557,7 +639,7 @@ export default function UsersPage() {
 							key={t}
 							type="button"
 							onClick={() => { setEnrollType(t); setEnrollStatus("idle"); setEnrollMessage(""); }}
-							className={`px-[10px] py-[4px] rounded-[9px] text-[11px] font-semibold transition-colors cursor-pointer ${
+							className={`px-[14px] py-[8px] rounded-[9px] text-[12px] font-semibold transition-colors cursor-pointer ${
 								enrollType === t
 									? "bg-blue text-white"
 									: "text-foreground-sec hover:text-foreground"
@@ -594,6 +676,20 @@ export default function UsersPage() {
 								disabled={enrollBusy}
 								placeholder="Enter user password"
 								autoComplete="current-password"
+								className="w-full px-[12px] py-[8px] bg-secondary/50 border border-secondary rounded-xl text-[13px] text-foreground outline-none focus:border-blue/50 transition-colors disabled:opacity-50"
+							/>
+						</div>
+						<div>
+							<label className="block text-[10px] tracking-wider text-foreground-sec uppercase mb-[6px]">
+								Name <span className="normal-case text-foreground-sec/60">(optional)</span>
+							</label>
+							<input
+								type="text"
+								value={enrollLabel}
+								onChange={(e) => setEnrollLabel(e.target.value)}
+								disabled={enrollBusy}
+								placeholder={enrollType === "passkey" ? "e.g. Bitwarden passkey" : "e.g. YubiKey 5C"}
+								maxLength={64}
 								className="w-full px-[12px] py-[8px] bg-secondary/50 border border-secondary rounded-xl text-[13px] text-foreground outline-none focus:border-blue/50 transition-colors disabled:opacity-50"
 							/>
 						</div>
@@ -757,14 +853,14 @@ export default function UsersPage() {
 			{/* Mobile — stacked */}
 			<div className="lg:hidden flex-1 overflow-y-auto pt-[52px]">
 				<div className="p-[10px] border-b border-secondary">
-					<div className="flex items-center gap-[8px] bg-secondary/50 rounded-[10px] px-[10px] py-[6px]">
-						<IconSearch size={13} className="text-foreground-sec shrink-0" />
+					<div className="flex items-center gap-[8px] bg-secondary/50 rounded-[10px] px-[12px] py-[10px]">
+						<IconSearch size={16} className="text-foreground-sec shrink-0" />
 						<input
 							type="text"
 							value={search}
 							onChange={(e) => setSearch(e.target.value)}
 							placeholder="Search users…"
-							className="flex-1 bg-transparent text-[12px] text-foreground placeholder:text-foreground-sec outline-none"
+							className="flex-1 bg-transparent text-[14px] text-foreground placeholder:text-foreground-sec outline-none"
 						/>
 					</div>
 				</div>
@@ -784,26 +880,26 @@ export default function UsersPage() {
 									<div
 										onClick={() => selectUser(open ? { ...user } : user)}
 										className={
-											"flex items-center justify-between gap-[10px] px-[10px] py-[9px] rounded-xl cursor-pointer transition-colors " +
+											"flex items-center justify-between gap-[10px] px-[12px] py-[14px] rounded-xl cursor-pointer transition-colors " +
 											(open ? "bg-blue/20" : "hover:bg-secondary/50")
 										}
 									>
-										<div className="flex items-center gap-[10px]">
+										<div className="flex items-center gap-[12px]">
 											<div className={
-												"w-[28px] h-[28px] rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 " +
+												"w-[36px] h-[36px] rounded-full flex items-center justify-center text-[14px] font-bold shrink-0 " +
 												(open ? "bg-blue text-primary" : "bg-secondary text-foreground-sec")
 											}>
 												{user.username[0]?.toUpperCase()}
 											</div>
 											<span className={
-												"text-[13px] font-semibold " +
+												"text-[15px] font-semibold " +
 												(open ? "text-blue" : "text-foreground")
 											}>
 												{user.username}
 											</span>
 										</div>
 										<span className={
-											"text-[10px] font-bold tracking-wider py-[2px] px-[8px] rounded-full " +
+											"text-[11px] font-bold tracking-wider py-[4px] px-[10px] rounded-full " +
 											(open ? "bg-blue/30 text-blue" : "bg-secondary text-foreground-sec")
 										}>
 											{user.credentials.length + (user.has_totp ? 1 : 0)} methods

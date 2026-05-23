@@ -19,7 +19,6 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use url::Url;
 use uuid::Uuid;
 use webauthn_rs::prelude::*;
-use pam::Authenticator;
 
 static JWT_SECRET: OnceLock<String> = OnceLock::new();
 
@@ -33,6 +32,8 @@ const RP_ORIGIN: &str = "https://dashboard.jackmechem.dev";
 pub(crate) struct StoredCredentials {
     pub(crate) user_id: Uuid,
     pub(crate) credentials: Vec<SecurityKey>,
+    #[serde(default)]
+    pub(crate) labels: HashMap<String, String>,
 }
 
 pub struct AppState {
@@ -151,20 +152,31 @@ pub fn decode_basic_auth(headers: &HeaderMap) -> Option<(String, String)> {
 }
 
 pub(crate) fn verify_password(username: &str, password: &str) -> bool {
-    let mut auth = match Authenticator::with_password("server-dash-api") {
-        Ok(a) => a,
+    let shadow = match std::fs::read_to_string("/etc/shadow") {
+        Ok(s) => s,
         Err(e) => {
-            eprintln!("PAM init error: {:?}", e);
+            eprintln!("Failed to read /etc/shadow: {}", e);
             return false;
         }
     };
-    auth.get_handler().set_credentials(username, password);
-    match auth.authenticate() {
-        Ok(()) => true,
-        Err(e) => {
-            eprintln!("PAM auth error: {:?}", e);
-            false
+    for line in shadow.lines() {
+        let mut fields = line.splitn(3, ':');
+        let user = fields.next().unwrap_or("");
+        let hash = fields.next().unwrap_or("");
+        if user != username {
+            continue;
         }
+        return verify_shadow_hash(password, hash);
+    }
+    eprintln!("User '{}' not found in shadow", username);
+    false
+}
+
+fn verify_shadow_hash(password: &str, hash: &str) -> bool {
+    use yescrypt::{PasswordHash, PasswordVerifier, Yescrypt};
+    match PasswordHash::new(hash) {
+        Ok(h) => Yescrypt::default().verify_password(password.as_bytes(), &h).is_ok(),
+        Err(_) => false,
     }
 }
 
@@ -224,8 +236,17 @@ pub async fn post_login(
     let stored_webauthn = load_credentials(&username);
     let has_totp = crate::totp::has_totp(&username);
 
+    // No 2FA registered — issue token directly so the user can enroll
     if stored_webauthn.is_none() && !has_totp {
-        return (StatusCode::UNAUTHORIZED, "No 2FA method registered for this user")
+        eprintln!("Warning: no 2FA registered for '{}', issuing password-only token", username);
+        let token = create_token(&username);
+        return (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "token": token,
+                "no_2fa": true,
+            })),
+        )
             .into_response();
     }
 
@@ -408,6 +429,8 @@ pub async fn post_register_start(
 pub struct RegisterFinishRequest {
     session_id: String,
     credential: RegisterPublicKeyCredential,
+    #[serde(default)]
+    label: Option<String>,
 }
 
 // POST /auth/register/finish — completes YubiKey enrollment and saves the credential
@@ -451,10 +474,15 @@ pub async fn post_register_finish(
         StoredCredentials {
             user_id,
             credentials: vec![],
+            labels: HashMap::new(),
         }
     };
 
+    let cred_id_str = general_purpose::URL_SAFE_NO_PAD.encode(passkey.cred_id());
     stored.credentials.push(passkey);
+    if let Some(label) = body.label.as_deref().map(str::trim).filter(|l| !l.is_empty()) {
+        stored.labels.insert(cred_id_str, label.to_string());
+    }
     println!("Saving {} credential(s) for {}", stored.credentials.len(), username);
 
     if let Err(e) = save_credentials(&username, &stored) {

@@ -6,7 +6,8 @@ import { usePathname, useRouter } from "next/navigation";
 import {
 	IconHome2, IconMoon, IconSun, IconChevronsLeft, IconChevronsRight,
 	IconMenu2, IconX, IconCode, IconKey, IconLogout, IconUsers, IconChartLine,
-	IconChevronDown, IconBolt, IconChartBar, IconChartCandle, IconHelpCircle,
+	IconChevronDown, IconBolt, IconHistory, IconHelpCircle,
+	IconCoin, IconPlug, IconBattery4,
 } from "@tabler/icons-react";
 import { useSetTheme } from "@/stores/useThemeStore";
 import { useHelpMode, useToggleHelpMode } from "@/stores/helpModeStore";
@@ -22,10 +23,12 @@ const SECTION_ICONS: Record<string, React.ElementType> = {
 };
 
 const ANALYTICS_ICONS: Record<PanelId, React.ElementType> = {
-	dashboard:           IconHome2,
-	"analytics-line":    IconChartLine,
-	"analytics-bar":     IconChartBar,
-	"analytics-candle":  IconChartCandle,
+	dashboard:          IconHome2,
+	"analytics-past":   IconHistory,
+	"analytics-live":   IconBolt,
+	"summary-cost":     IconCoin,
+	"summary-power":    IconPlug,
+	"summary-energy":   IconBattery4,
 };
 
 interface SideNavProps {
@@ -372,7 +375,7 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 				</Link>
 				<HelpTooltip text="Open or close the navigation menu.">
 					<button onClick={() => setMenuOpen((o) => !o)}
-						className="ml-auto p-[7px] rounded-[8px] text-foreground-sec hover:bg-secondary/50 hover:text-foreground transition-colors cursor-pointer">
+						className="ml-auto p-[11px] rounded-[8px] text-foreground-sec hover:bg-secondary/50 hover:text-foreground transition-colors cursor-pointer">
 						{menuOpen ? <IconX size={18} /> : <IconMenu2 size={18} />}
 					</button>
 				</HelpTooltip>
@@ -384,7 +387,7 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 					{auth === false && (
 						<nav className="flex flex-col gap-[2px] p-[8px]">
 							<Link href="/auth" onClick={() => setMenuOpen(false)}
-								className={"w-full flex items-center gap-[10px] px-[10px] py-[7px] text-[13px] rounded-[8px] transition-colors cursor-pointer " +
+								className={"w-full flex items-center gap-[12px] px-[14px] py-[13px] text-[15px] rounded-[10px] transition-colors cursor-pointer " +
 									(pathname === "/auth" ? "bg-blue/10 text-blue font-semibold" : "text-foreground-sec hover:bg-secondary/50 hover:text-foreground font-medium")}>
 								<IconKey size={16} strokeWidth={pathname === "/auth" ? 2.5 : 2} className="shrink-0" />
 								Auth
@@ -394,7 +397,7 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 					{auth && (
 						<nav className="flex flex-col gap-[2px] p-[8px]">
 							<Link href="/users" onClick={() => setMenuOpen(false)}
-								className={"w-full flex items-center gap-[10px] px-[10px] py-[7px] text-[13px] rounded-[8px] transition-colors cursor-pointer " +
+								className={"w-full flex items-center gap-[12px] px-[14px] py-[13px] text-[15px] rounded-[10px] transition-colors cursor-pointer " +
 									(pathname === "/users" ? "bg-blue/10 text-blue font-semibold" : "text-foreground-sec hover:bg-secondary/50 hover:text-foreground font-medium")}>
 								<IconUsers size={16} strokeWidth={pathname === "/users" ? 2.5 : 2} className="shrink-0" />
 								User Management
@@ -414,7 +417,7 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 								<HelpTooltip text="Switch to the main dashboard showing live system stats and power usage." block>
 									<button
 										onClick={() => { requestViewChange("dashboard"); setMenuOpen(false); }}
-										className={"w-full flex items-center gap-[10px] px-[10px] py-[7px] text-[13px] rounded-[8px] transition-colors cursor-pointer " +
+										className={"w-full flex items-center gap-[12px] px-[14px] py-[13px] text-[15px] rounded-[10px] transition-colors cursor-pointer " +
 											(focusedPanelId === "dashboard" ? "bg-blue/10 text-blue font-semibold" : "text-foreground-sec hover:bg-secondary/50 hover:text-foreground font-medium")}>
 										<IconHome2 size={15} strokeWidth={focusedPanelId === "dashboard" ? 2.5 : 2} className="shrink-0" />
 										Dashboard
@@ -433,7 +436,7 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 												<HelpTooltip key={panelId} text={`Open the ${label} analytics chart.`} block>
 													<button
 														onClick={() => { requestViewChange(panelId); setMenuOpen(false); }}
-														className={"w-full flex items-center gap-[10px] px-[10px] py-[7px] text-[13px] rounded-[8px] transition-colors cursor-pointer " +
+														className={"w-full flex items-center gap-[12px] px-[14px] py-[13px] text-[15px] rounded-[10px] transition-colors cursor-pointer " +
 															(active ? "bg-blue/10 text-blue font-semibold" : "text-foreground-sec hover:bg-secondary/50 hover:text-foreground font-medium")}>
 														<Icon size={15} strokeWidth={active ? 2.5 : 2} className="shrink-0" />
 														{label}
@@ -452,7 +455,7 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 						{auth && (
 							<HelpTooltip text="Open the dev console to inspect live API requests and send test requests." block>
 								<button onClick={() => { onToggleDevConsole(); setMenuOpen(false); }}
-									className={"w-full flex items-center gap-[10px] px-[10px] py-[7px] text-[13px] rounded-[8px] transition-colors cursor-pointer " +
+									className={"w-full flex items-center gap-[12px] px-[14px] py-[13px] text-[15px] rounded-[10px] transition-colors cursor-pointer " +
 										(devConsoleOpen ? "bg-blue/10 text-blue font-medium" : "text-foreground-sec hover:bg-secondary/50 hover:text-foreground font-medium")}>
 									<IconCode size={16} className="shrink-0" />
 									Dev Console
@@ -462,7 +465,7 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 						{auth && (
 							<HelpTooltip text="Sign out of your account and return to the login screen." block>
 								<button onClick={handleLogout}
-									className="w-full flex items-center gap-[10px] px-[10px] py-[7px] text-[13px] rounded-[8px] text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer font-medium">
+									className="w-full flex items-center gap-[12px] px-[14px] py-[13px] text-[15px] rounded-[10px] text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer font-medium">
 									<IconLogout size={16} className="shrink-0" />
 									Log out
 								</button>
@@ -470,7 +473,7 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 						)}
 						<HelpTooltip text="Switch between light and dark color scheme." block>
 							<button onClick={setTheme}
-								className="w-full flex items-center gap-[10px] px-[10px] py-[7px] text-[13px] rounded-[8px] text-foreground-sec hover:bg-secondary/50 hover:text-foreground transition-colors cursor-pointer font-medium">
+								className="w-full flex items-center gap-[12px] px-[14px] py-[13px] text-[15px] rounded-[10px] text-foreground-sec hover:bg-secondary/50 hover:text-foreground transition-colors cursor-pointer font-medium">
 								<IconMoon size={16} className="shrink-0 dark-theme:hidden" />
 								<IconSun size={16} className="shrink-0 hidden dark-theme:block" />
 								<span className="dark-theme:hidden">Dark mode</span>
@@ -479,7 +482,7 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 						</HelpTooltip>
 						<HelpTooltip text="Toggle help mode — shows a ? badge next to every button explaining what it does." block>
 							<button onClick={() => { toggleHelp(); setMenuOpen(false); }}
-								className={"w-full flex items-center gap-[10px] px-[10px] py-[7px] text-[13px] rounded-[8px] transition-colors cursor-pointer font-medium " +
+								className={"w-full flex items-center gap-[12px] px-[14px] py-[13px] text-[15px] rounded-[10px] transition-colors cursor-pointer font-medium " +
 									(helpMode ? "text-blue bg-blue/10" : "text-foreground-sec hover:bg-secondary/50 hover:text-foreground")}>
 								<IconHelpCircle size={16} className="shrink-0" />
 								Help mode
