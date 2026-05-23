@@ -6,15 +6,10 @@ edition = "2024"
 [dependencies]
 axum = "0.8.8"
 base64 = "0.22.1"
-bcrypt = "0.19.0"
 chrono = "0.4.44"
-crypt = "0.1.0"
-yescrypt = { version = "0.1.0-pre.4", features = ["password-hash"] }
-password-hash = { version = "0.6", features = ["phc"] }
 jsonwebtoken = { version = "10.3.0", features = ["rust_crypto"] }
 libc = "0.2.183"
 pam = { version = "0.8.0", features = ["client"] }
-pwhash = "1.0.0"
 rand = "0.10.0"
 rustls = { version = "0.23.37", features = ["ring"] }
 serde = { version = "1", features = ["derive"] }

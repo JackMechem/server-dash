@@ -194,6 +194,9 @@
                             "d /var/lib/server-dash-api/totp 0750 server-dash-api server-dash-api -"
                         ];
 
+                        security.pam.services.server-dash-api = { };
+
+
                         security.polkit.extraConfig = ''
                             polkit.addRule(function(action, subject) {
                                 if ((action.id == "org.freedesktop.systemd1.manage-units" ||

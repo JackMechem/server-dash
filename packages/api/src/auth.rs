@@ -19,7 +19,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use url::Url;
 use uuid::Uuid;
 use webauthn_rs::prelude::*;
-use yescrypt::{PasswordHash, PasswordVerifier, Yescrypt};
+use pam::Authenticator;
 
 static JWT_SECRET: OnceLock<String> = OnceLock::new();
 
@@ -151,38 +151,21 @@ pub fn decode_basic_auth(headers: &HeaderMap) -> Option<(String, String)> {
 }
 
 pub(crate) fn verify_password(username: &str, password: &str) -> bool {
-    let shadow_content = match std::fs::read_to_string("/etc/shadow") {
-        Ok(c) => c,
+    let mut auth = match Authenticator::with_password("server-dash-api") {
+        Ok(a) => a,
         Err(e) => {
-            println!("Failed to read /etc/shadow: {}", e);
+            eprintln!("PAM init error: {:?}", e);
             return false;
         }
     };
-    for line in shadow_content.lines() {
-        let fields: Vec<&str> = line.split(':').collect();
-        if fields.len() < 2 {
-            continue;
+    auth.get_handler().set_credentials(username, password);
+    match auth.authenticate() {
+        Ok(()) => true,
+        Err(e) => {
+            eprintln!("PAM auth error: {:?}", e);
+            false
         }
-        if fields[0] != username {
-            continue;
-        }
-        return verify_shadow_hash(password, fields[1]);
     }
-    println!("User not found in shadow");
-    false
-}
-
-fn verify_shadow_hash(password: &str, hash: &str) -> bool {
-    let parsed_hash = match PasswordHash::new(hash) {
-        Ok(h) => h,
-        Err(e) => {
-            println!("Failed to parse hash: {:?}", e);
-            return false;
-        }
-    };
-    Yescrypt::default()
-        .verify_password(password.as_bytes(), &parsed_hash)
-        .is_ok()
 }
 
 pub(crate) fn load_credentials(username: &str) -> Option<StoredCredentials> {
