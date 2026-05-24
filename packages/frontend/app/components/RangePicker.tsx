@@ -43,7 +43,6 @@ export default function RangePicker({
 	const fs = mobile ? 15 : 13;
 	const pad = mobile ? "10px 12px" : "7px 10px";
 
-	// Position menu below (or above) trigger
 	useEffect(() => {
 		if (!open || !triggerRef.current) return;
 		const r = triggerRef.current.getBoundingClientRect();
@@ -56,7 +55,6 @@ export default function RangePicker({
 		});
 	}, [open, mobile]);
 
-	// Close on outside click
 	useEffect(() => {
 		if (!open) return;
 		const h = (e: MouseEvent) => {

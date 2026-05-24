@@ -38,9 +38,11 @@ pub(crate) struct StoredCredentials {
 
 pub struct AppState {
     pub webauthn: Webauthn,
-    pending_auth: Mutex<HashMap<String, (SecurityKeyAuthentication, Instant, String)>>,
+    // (auth_state, created_at, system_user, app_username)
+    pending_auth: Mutex<HashMap<String, (SecurityKeyAuthentication, Instant, String, String)>>,
     pending_reg: Mutex<HashMap<String, (SecurityKeyRegistration, Instant, String, Uuid)>>,
-    pending_totp: Mutex<HashMap<String, (Instant, String)>>,
+    // (created_at, system_user, app_username)
+    pending_totp: Mutex<HashMap<String, (Instant, String, String)>>,
 }
 
 impl AppState {
@@ -127,6 +129,18 @@ pub fn create_token(username: &str) -> String {
         &EncodingKey::from_secret(jwt_secret().as_bytes()),
     )
     .unwrap()
+}
+
+pub fn get_token_subject(headers: &HeaderMap) -> Option<String> {
+    let val = headers.get("Authorization")?.to_str().ok()?;
+    let token = val.strip_prefix("Bearer ")?;
+    let data = decode::<Claims>(
+        token,
+        &DecodingKey::from_secret(jwt_secret().as_bytes()),
+        &Validation::default(),
+    )
+    .ok()?;
+    Some(data.claims.sub)
 }
 
 pub fn verify_token(headers: &HeaderMap) -> bool {
@@ -229,17 +243,34 @@ pub async fn post_login(
         }
     };
 
-    if !verify_password(&username, &password) {
-        return (StatusCode::UNAUTHORIZED, "Invalid credentials").into_response();
-    }
+    // Check app credentials first; only fall back to /etc/shadow if explicitly enabled
+    let (system_user, app_username) = {
+        let all = crate::app_credentials::load_all();
+        if let Some(cred) = all.iter().find(|c| c.username == username) {
+            if !crate::app_credentials::verify_app_password(&password, &cred.password_hash) {
+                return (StatusCode::UNAUTHORIZED, "Invalid credentials").into_response();
+            }
+            // Use system_user for 2FA lookups if set, otherwise use app username
+            let effective = cred.system_user.clone().unwrap_or_else(|| username.clone());
+            (effective, username.clone())
+        } else {
+            if !crate::settings::load().allow_system_login {
+                return (StatusCode::UNAUTHORIZED, "Invalid credentials").into_response();
+            }
+            if !verify_password(&username, &password) {
+                return (StatusCode::UNAUTHORIZED, "Invalid credentials").into_response();
+            }
+            (username.clone(), username.clone())
+        }
+    };
 
-    let stored_webauthn = load_credentials(&username);
-    let has_totp = crate::totp::has_totp(&username);
+    let stored_webauthn = load_credentials(&system_user);
+    let has_totp = crate::totp::has_totp(&system_user);
 
     // No 2FA registered — issue token directly so the user can enroll
     if stored_webauthn.is_none() && !has_totp {
-        eprintln!("Warning: no 2FA registered for '{}', issuing password-only token", username);
-        let token = create_token(&username);
+        eprintln!("Warning: no 2FA registered for '{}', issuing password-only token", system_user);
+        let token = create_token(&app_username);
         return (
             StatusCode::OK,
             Json(serde_json::json!({
@@ -254,12 +285,12 @@ pub async fn post_login(
 
     if has_totp {
         let mut pending = state.pending_totp.lock().unwrap();
-        pending.retain(|_, (t, _)| t.elapsed() < CHALLENGE_TTL);
-        pending.insert(session_id.clone(), (Instant::now(), username.clone()));
+        pending.retain(|_, (t, _, _)| t.elapsed() < CHALLENGE_TTL);
+        pending.insert(session_id.clone(), (Instant::now(), system_user.clone(), app_username.clone()));
     }
 
     if let Some(stored) = stored_webauthn {
-        println!("Authentication: {} credential(s) found for {}", stored.credentials.len(), username);
+        println!("Authentication: {} credential(s) found for {}", stored.credentials.len(), system_user);
 
         let (rcr, auth_state) = match state
             .webauthn
@@ -274,8 +305,8 @@ pub async fn post_login(
 
         {
             let mut pending = state.pending_auth.lock().unwrap();
-            pending.retain(|_, (_, t, _)| t.elapsed() < CHALLENGE_TTL);
-            pending.insert(session_id.clone(), (auth_state, Instant::now(), username));
+            pending.retain(|_, (_, t, _, _)| t.elapsed() < CHALLENGE_TTL);
+            pending.insert(session_id.clone(), (auth_state, Instant::now(), system_user.clone(), app_username.clone()));
         }
 
         return (
@@ -312,10 +343,10 @@ pub async fn post_verify(
     State(state): State<Arc<AppState>>,
     Json(body): Json<VerifyRequest>,
 ) -> impl IntoResponse {
-    let (auth_state, username) = {
+    let (auth_state, system_user, app_username) = {
         let mut pending = state.pending_auth.lock().unwrap();
         match pending.remove(&body.session_id) {
-            Some((s, created, u)) if created.elapsed() < CHALLENGE_TTL => (s, u),
+            Some((s, created, sys_u, app_u)) if created.elapsed() < CHALLENGE_TTL => (s, sys_u, app_u),
             Some(_) => return (StatusCode::UNAUTHORIZED, "Challenge expired").into_response(),
             None => return (StatusCode::UNAUTHORIZED, "Invalid session").into_response(),
         }
@@ -333,14 +364,14 @@ pub async fn post_verify(
     };
 
     // Persist updated credential counter
-    if let Some(mut stored) = load_credentials(&username) {
+    if let Some(mut stored) = load_credentials(&system_user) {
         for cred in &mut stored.credentials {
             cred.update_credential(&auth_result);
         }
-        save_credentials(&username, &stored).ok();
+        save_credentials(&system_user, &stored).ok();
     }
 
-    let token = create_token(&username);
+    let token = create_token(&app_username);
     (StatusCode::OK, Json(serde_json::json!({ "token": token }))).into_response()
 }
 
@@ -355,23 +386,23 @@ pub async fn post_verify_totp(
     State(state): State<Arc<AppState>>,
     Json(body): Json<VerifyTotpRequest>,
 ) -> impl IntoResponse {
-    let username = {
+    let (system_user, app_username) = {
         let mut pending = state.pending_totp.lock().unwrap();
         match pending.remove(&body.session_id) {
-            Some((created, u)) if created.elapsed() < CHALLENGE_TTL => u,
+            Some((created, sys_u, app_u)) if created.elapsed() < CHALLENGE_TTL => (sys_u, app_u),
             Some(_) => return (StatusCode::UNAUTHORIZED, "Session expired").into_response(),
             None => return (StatusCode::UNAUTHORIZED, "Invalid session").into_response(),
         }
     };
 
-    if !crate::totp::verify_totp_code(&username, &body.code) {
+    if !crate::totp::verify_totp_code(&system_user, &body.code) {
         return (StatusCode::UNAUTHORIZED, "Invalid TOTP code").into_response();
     }
 
     // Invalidate any concurrent WebAuthn session for the same session_id
     state.pending_auth.lock().unwrap().remove(&body.session_id);
 
-    let token = create_token(&username);
+    let token = create_token(&app_username);
     (StatusCode::OK, Json(serde_json::json!({ "token": token }))).into_response()
 }
 

@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, startTransition } from "react";
+import { usePower } from "../../lib/DataProvider";
 import { createPortal } from "react-dom";
 import {
 	IconRefresh, IconChartBar,
 	IconChartLine, IconChartCandle, IconLayoutSidebarRight, IconX, IconCalendar,
+	IconChevronDown, IconCheck,
 } from "@tabler/icons-react";
 import RangePicker, { type RangeUnit, RANGE_UNIT_HOURS, initRangeFromHours } from "@/app/components/RangePicker";
 import IntervalPicker, { INTERVAL_UNITS } from "@/app/components/IntervalPicker";
@@ -122,15 +124,16 @@ function getBucketKey(d: Date, groupBy: GroupBy, customMs?: number): number {
 
 function fmtTs(ts: string, groupBy: GroupBy, spanH: number): string {
 	const d = new Date(ts);
+	const hh = d.getHours(), mm = d.getMinutes().toString().padStart(2, "0");
+	const h12 = hh % 12 || 12, ampm = hh >= 12 ? "p" : "a";
+	const mo = d.getMonth() + 1, dy = d.getDate();
 	if (groupBy === "year")  return String(d.getFullYear());
-	if (groupBy === "month") return d.toLocaleDateString([], { month: "short", year: "2-digit" });
-	if (groupBy === "day")   return d.toLocaleDateString([], { month: "short", day: "numeric" });
-	if (groupBy === "hour")  return spanH > 24
-		? d.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit" })
-		: d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-	if (spanH <= 24) return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-	if (spanH <= 72) return d.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-	return d.toLocaleDateString([], { month: "short", day: "numeric" });
+	if (groupBy === "month") return `${mo}/${String(d.getFullYear()).slice(2)}`;
+	if (groupBy === "day")   return `${mo}/${dy}`;
+	if (groupBy === "hour")  return spanH > 24 ? `${mo}/${dy} ${h12}${ampm}` : `${h12}:${mm}${ampm}`;
+	if (spanH <= 24) return `${h12}:${mm}${ampm}`;
+	if (spanH <= 72) return `${mo}/${dy} ${h12}${ampm}`;
+	return `${mo}/${dy}`;
 }
 
 function fmtMetricVal(v: number, metric: Metric): string {
@@ -359,6 +362,73 @@ function PanelOpt({ label, selected, color, onClick, mobile }: {
 	);
 }
 
+// ── Live unit dropdown (used only for Update Interval slider) ─────────────────
+
+function LiveUnitDropdown({ value, units, mobile, onChange }: {
+	value: string;
+	units: { value: string; label: string; max: number }[];
+	mobile?: boolean;
+	onChange: (v: string) => void;
+}) {
+	const [open, setOpen] = useState(false);
+	const triggerRef = useRef<HTMLButtonElement>(null);
+	const menuRef    = useRef<HTMLDivElement>(null);
+	const [pos, setPos] = useState({ top: 0, left: 0, w: 0 });
+	const fs  = mobile ? 15 : 13;
+	const pad = mobile ? "10px 10px" : "7px 10px";
+
+	useEffect(() => {
+		if (!open || !triggerRef.current) return;
+		const r = triggerRef.current.getBoundingClientRect();
+		const menuH = units.length * (mobile ? 44 : 36) + 8;
+		const below = r.bottom + 4 + menuH < window.innerHeight - 8;
+		setPos({ top: below ? r.bottom + 4 : r.top - menuH - 4, left: r.left, w: r.width });
+		const h = (e: MouseEvent) => {
+			if (!triggerRef.current?.contains(e.target as Node) && !menuRef.current?.contains(e.target as Node)) setOpen(false);
+		};
+		document.addEventListener("mousedown", h);
+		return () => document.removeEventListener("mousedown", h);
+	}, [open, units.length, mobile]);
+
+	const label = units.find(u => u.value === value)?.label ?? value;
+
+	return (<>
+		<button ref={triggerRef} onClick={() => setOpen(o => !o)} style={{
+			display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4,
+			padding: pad, borderRadius: 8,
+			border: `1px solid ${open ? "var(--color-blue)" : "var(--color-secondary)"}`,
+			background: open ? "color-mix(in srgb, var(--color-blue) 8%, var(--color-secondary) 28%)" : "color-mix(in srgb, var(--color-secondary) 35%, transparent)",
+			color: "var(--color-foreground)", fontSize: fs, fontWeight: 500, cursor: "pointer",
+		}}>
+			<span>{label}</span>
+			<IconChevronDown size={mobile ? 13 : 11} style={{ color: "var(--color-foreground-sec)", flexShrink: 0, transition: "transform 150ms", transform: open ? "rotate(180deg)" : "rotate(0deg)" }} />
+		</button>
+		{open && typeof document !== "undefined" && createPortal(
+			<div ref={menuRef} style={{ position: "fixed", top: pos.top, left: pos.left, minWidth: Math.max(pos.w, 90), background: "var(--color-primary)", border: "1px solid var(--color-secondary)", borderRadius: 10, boxShadow: "0 8px 28px rgba(0,0,0,0.2)", zIndex: 9999, padding: 4 }}>
+				{units.map(u => {
+					const active = u.value === value;
+					return (
+						<button key={u.value} onClick={() => { onChange(u.value); setOpen(false); }} style={{
+							width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+							padding: mobile ? "10px 12px" : "7px 10px", borderRadius: 7, border: "none",
+							background: active ? "color-mix(in srgb, var(--color-blue) 12%, transparent)" : "transparent",
+							color: active ? "var(--color-blue)" : "var(--color-foreground)",
+							fontSize: mobile ? 14 : 13, fontWeight: active ? 600 : 400, cursor: "pointer",
+						}}
+						onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = "color-mix(in srgb, var(--color-secondary) 55%, transparent)"; }}
+						onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = active ? "color-mix(in srgb, var(--color-blue) 12%, transparent)" : "transparent"; }}
+						>
+							<span>{u.label}</span>
+							{active && <IconCheck size={12} style={{ color: "var(--color-blue)", flexShrink: 0 }} />}
+						</button>
+					);
+				})}
+			</div>,
+			document.body
+		)}
+	</>);
+}
+
 // ── Tooltip ───────────────────────────────────────────────────────────────────
 
 function ChartTooltip({ label, mouseX, mouseY, children }: {
@@ -405,7 +475,7 @@ function bucketByCount(readings: HistoryEntry[], n: number): HistoryEntry[] {
 
 // ── Line Chart ────────────────────────────────────────────────────────────────
 
-const LM = { top: 8, right: 16, bottom: 64, left: 56 };
+const LM = { top: 8, right: 16, bottom: 26, left: 56 };
 
 function LineChart({ readings, deviceNames, colors, visible, hours, metric, groupBy, liveMode = false, tension = 1 / 6 }: {
 	readings: HistoryEntry[]; deviceNames: string[]; colors: Map<string, string>;
@@ -542,7 +612,7 @@ function LineChart({ readings, deviceNames, colors, visible, hours, metric, grou
 							<line x1={0} x2={iW2} y1={iH2} y2={iH2} stroke="var(--color-secondary)" strokeDasharray="3,3" strokeWidth={1} />
 							<text x={-6} y={iH2} textAnchor="end" dominantBaseline="middle" fill="var(--color-foreground-sec)" fontSize={10}>0</text>
 							{ghostTs.map((ts, i) => (
-								<text key={i} textAnchor="end" transform={`translate(${gx(i).toFixed(1)},${iH2 + 8}) rotate(-45)`} fill="var(--color-foreground-sec)" fontSize={10}>
+								<text key={i} x={gx(i).toFixed(1)} y={iH2 + 16} textAnchor="middle" fill="var(--color-foreground-sec)" fontSize={10}>
 									{fmtTs(ts, groupBy, hours)}
 								</text>
 							))}
@@ -571,7 +641,9 @@ function LineChart({ readings, deviceNames, colors, visible, hours, metric, grou
 	const yS = (v: number) => iH - (v / Math.max(yMax, 0.001)) * iH;
 
 	const viXIdx = timestamps.map((_, i) => i).filter(i => xS(i) >= -20 && xS(i) <= iW + 20);
-	const step = Math.max(1, Math.floor(viXIdx.length / 8));
+	// Pixel gap per data point; require at least 52px between label centres so they never overlap.
+	const pxPerPt = viXIdx.length > 1 ? (xS(viXIdx[viXIdx.length - 1]) - xS(viXIdx[0])) / (viXIdx.length - 1) : iW;
+	const step = Math.max(1, Math.ceil(52 / Math.max(pxPerPt, 0.1)));
 	const labelIdx = viXIdx.filter((_, j) => j % step === 0);
 
 	const onMD = (e: React.MouseEvent) => {
@@ -625,7 +697,7 @@ function LineChart({ readings, deviceNames, colors, visible, hours, metric, grou
 							</g>
 						))}
 						{labelIdx.map(i => (
-							<text key={i} textAnchor="end" transform={`translate(${xS(i)},${iH + 8}) rotate(-45)`} fill="var(--color-foreground-sec)" fontSize={10}>
+							<text key={i} x={xS(i)} y={iH + 16} textAnchor="middle" fill="var(--color-foreground-sec)" fontSize={10}>
 								{fmtTs(timestamps[i], groupBy, hours)}
 							</text>
 						))}
@@ -1264,6 +1336,7 @@ function DateRangePickerPortal({
 // ── AnalyticsPanel ────────────────────────────────────────────────────────────
 
 export default function AnalyticsPanel({ mode = "past", readOnly = false, defaultHours = 24 }: { mode?: "past" | "live"; readOnly?: boolean; defaultHours?: number }) {
+	const { power } = usePower();
 	const [rangeCount, setRangeCount] = useState(() => initRangeFromHours(defaultHours).count);
 	const [rangeUnit, setRangeUnit] = useState<RangeUnit>(() => initRangeFromHours(defaultHours).unit);
 	const [loading, setLoading] = useState(true);
@@ -1285,8 +1358,11 @@ export default function AnalyticsPanel({ mode = "past", readOnly = false, defaul
 	const [panelWidth, setPanelWidth] = useState(280);
 	const [panelTab, setPanelTab] = useState<PanelTab>("time");
 	const [isMobile, setIsMobile] = useState(false);
-	const [liveIntervalSec, setLiveIntervalSec] = useState(0);
-	const [liveAvgBucket, setLiveAvgBucket] = useState(1);
+	const [liveIntervalValue, setLiveIntervalValue] = useState(1);
+	const [liveIntervalUnit, setLiveIntervalUnit] = useState("second");
+	const LIVE_INTERVAL_UNIT_MS: Record<string, number> = { second: 1000, minute: 60_000, hour: 3_600_000 };
+	const liveIntervalMs = liveIntervalValue * (LIVE_INTERVAL_UNIT_MS[liveIntervalUnit] ?? 1000);
+	const [liveSmoothingPct, setLiveSmoothingPct] = useState(2);
 	const [rangeMode, setRangeMode] = useState<"hours" | "custom">("hours");
 	const [customStart, setCustomStart] = useState(() => new Date(Date.now() - 24 * 3600 * 1000).toISOString());
 	const [customEnd, setCustomEnd] = useState(() => new Date().toISOString());
@@ -1348,53 +1424,50 @@ export default function AnalyticsPanel({ mode = "past", readOnly = false, defaul
 	}, [effectiveBarXAxis, barXAxisCustomUnit, localChartType]);
 
 	const fetchHistory = useCallback(async (silent = false) => {
+		if (mode === "live") return; // live mode is driven by context, not fetch
 		const showOverlay = !silent && !hasLoadedOnce.current;
 		if (showOverlay) setLoading(true);
 		try {
-			if (mode === "live") {
-				// Poll current device state; each call creates one new data point
-				const res = await fetch("/api/power");
-				if (!res.ok) return;
-				const data = await res.json();
-				const entry: HistoryEntry = {
-					ts: data.timestamp ?? new Date().toISOString(),
-					devices: (data.devices ?? []).map((d: { name: string; current_power_w: number; on: boolean; today_energy_wh?: number; month_energy_wh?: number }) => ({
-						name: d.name,
-						watts: d.current_power_w,
-						on: d.on,
-						today_wh: d.today_energy_wh ?? 0,
-						month_wh: d.month_energy_wh ?? 0,
-					})),
-				};
-				if (entry.devices.length > 0) {
-					setReadings(prev => [...prev, entry]);
-				}
-				return;
-			}
 			const url = rangeMode === "custom"
 				? `/api/power/history?start=${encodeURIComponent(customStart)}&end=${encodeURIComponent(customEnd)}`
 				: `/api/power/history?hours=${hours}`;
 			const res = await fetch(url);
 			if (!res.ok) return;
-			setReadings((await res.json()).readings ?? []);
+			const data = (await res.json()).readings ?? [];
+			startTransition(() => { setReadings(data); });
 		} finally { hasLoadedOnce.current = true; if (showOverlay) setLoading(false); }
 	}, [hours, rangeMode, customStart, customEnd, mode]);
 
 	useEffect(() => { fetchHistory(); }, [fetchHistory]);
 
+	// Live mode: subscribe to the shared power context instead of fetching ourselves.
+	// startTransition marks chart updates as low-priority so they never block
+	// user interactions (hover, flyout, animations).
+	const lastLiveTsRef = useRef<string | null>(null);
+	const lastAppendRef = useRef<number>(0);
 	useEffect(() => {
-		if (mode !== "live") return;
-		if (liveIntervalSec === 0) {
-			// Continuous: fire next fetch immediately after previous completes
-			let active = true;
-			const loop = () => { if (active) fetchHistory(true).finally(() => { if (active) setTimeout(loop, 0); }); };
-			loop();
-			return () => { active = false; };
-		}
-		const ms = Math.max(1000, liveIntervalSec * 1000);
-		const id = setInterval(() => fetchHistory(true), ms);
-		return () => clearInterval(id);
-	}, [mode, liveIntervalSec, fetchHistory]);
+		if (mode !== "live" || !power || !power.timestamp) return;
+		if (power.timestamp === lastLiveTsRef.current) return;
+		if (power.devices.length === 0) return;
+		if (Date.now() - lastAppendRef.current < liveIntervalMs) return;
+		lastLiveTsRef.current = power.timestamp;
+		lastAppendRef.current = Date.now();
+		const entry: HistoryEntry = {
+			ts: power.timestamp,
+			devices: power.devices.map(d => ({
+				name: d.name,
+				watts: d.current_power_w,
+				on: d.on,
+				today_wh: d.today_energy_wh ?? 0,
+				month_wh: d.month_energy_wh ?? 0,
+			})),
+		};
+		startTransition(() => {
+			setReadings(prev => [...prev, entry]);
+			hasLoadedOnce.current = true;
+			setLoading(false);
+		});
+	}, [power, mode, liveIntervalMs]);
 
 	const deviceNames = useMemo(
 		() => [...new Set(readings.flatMap(r => r.devices.map(d => d.name)))].sort(),
@@ -1427,11 +1500,11 @@ export default function AnalyticsPanel({ mode = "past", readOnly = false, defaul
 		[readings, effectiveGroupBy, effectiveLineCustomMs],
 	);
 
-	// Clear live data when the polling interval changes (x-axis resolution changed)
+	// Clear live data when the update interval changes (x-axis resolution changed)
 	useEffect(() => {
 		if (mode !== "live") return;
 		setReadings([]);
-	}, [liveIntervalSec]);
+	}, [liveIntervalMs]);
 
 	const paddedDisplayReadings = useMemo(() => {
 		// In live mode: show raw collected points only, no zero-padding
@@ -1441,10 +1514,11 @@ export default function AnalyticsPanel({ mode = "past", readOnly = false, defaul
 		return padLineToRange(displayReadings, startMs, endMs, effectiveGroupBy, effectiveLineCustomMs, deviceNames);
 	}, [mode, displayReadings, hours, rangeMode, customStart, customEnd, effectiveGroupBy, effectiveLineCustomMs, deviceNames]);
 
-	const smoothedReadings = useMemo(
-		() => mode === "live" ? bucketByCount(paddedDisplayReadings, liveAvgBucket) : paddedDisplayReadings,
-		[mode, paddedDisplayReadings, liveAvgBucket],
-	);
+	const smoothedReadings = useMemo(() => {
+		if (mode !== "live" || liveSmoothingPct === 0) return paddedDisplayReadings;
+		const n = Math.max(1, Math.ceil(paddedDisplayReadings.length * liveSmoothingPct / 100));
+		return bucketByCount(paddedDisplayReadings, n);
+	}, [mode, paddedDisplayReadings, liveSmoothingPct]);
 
 	const iconBtn = (active = false): React.CSSProperties => ({
 		display: "flex", alignItems: "center", justifyContent: "center",
@@ -1516,78 +1590,50 @@ export default function AnalyticsPanel({ mode = "past", readOnly = false, defaul
 			</>)}
 
 			{mode === "live" && (<>
-				{sectionTitle("Polling Interval")}
-				<div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: isMobile ? 6 : 4, marginBottom: isMobile ? 8 : 6 }}>
-					{[
-						{ label: null, sec: 0 }, { label: "1s", sec: 1 }, { label: "3s", sec: 3 }, { label: "5s", sec: 5 },
-						{ label: "10s", sec: 10 }, { label: "30s", sec: 30 }, { label: "1m", sec: 60 }, { label: "5m", sec: 300 },
-					].map(({ label, sec }) => (
-						<button key={sec} onClick={() => setLiveIntervalSec(sec)} style={{
-							padding: isMobile ? "11px 4px" : "5px 4px", borderRadius: 6,
-							fontSize: isMobile ? 14 : 11, fontWeight: liveIntervalSec === sec ? 600 : 400,
-							cursor: "pointer", border: "none", display: "flex", alignItems: "center", justifyContent: "center",
-							background: liveIntervalSec === sec ? "var(--color-blue)" : "color-mix(in srgb, var(--color-secondary) 60%, transparent)",
-							color: liveIntervalSec === sec ? "var(--color-primary)" : "var(--color-foreground-sec)",
-							transition: "all 120ms",
-						}}>{label === null ? "min." : label}</button>
-					))}
-				</div>
-				{liveIntervalSec !== 0 && <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 2px", marginBottom: 8 }}>
-					<span style={{ fontSize: isMobile ? 13 : 11, color: "var(--color-foreground-sec)", fontWeight: 500 }}>Custom</span>
-					<input
-						type="text" inputMode="numeric" pattern="[0-9]*"
-						value={liveIntervalSec === 0 ? "" : liveIntervalSec}
-						placeholder=""
-						onChange={e => {
-							const v = parseInt(e.target.value.replace(/\D/g, ""));
-							setLiveIntervalSec(isNaN(v) ? 0 : Math.max(1, v));
-						}}
-						style={{
-							flex: 1, padding: isMobile ? "10px 12px" : "5px 8px", borderRadius: 7,
-							fontSize: isMobile ? 14 : 11,
-							background: "color-mix(in srgb, var(--color-secondary) 50%, transparent)",
-							border: `1px solid ${![0,1,3,5,10,30,60,300].includes(liveIntervalSec) ? "var(--color-blue)" : "var(--color-secondary)"}`,
-							color: "var(--color-foreground)", outline: "none",
-						}}
-					/>
-					<span style={{ fontSize: isMobile ? 13 : 11, color: "var(--color-foreground-sec)" }}>s</span>
-				</div>}
+				{sectionTitle("Update Interval")}
+				{(() => {
+					const LIVE_UNITS = [
+						{ value: "second", label: "sec", max: 59 },
+						{ value: "minute", label: "min", max: 59 },
+						{ value: "hour",   label: "hr",  max: 24 },
+					];
+					const unitCfg = LIVE_UNITS.find(u => u.value === liveIntervalUnit) ?? LIVE_UNITS[0];
+					const unitLabel = unitCfg.label;
+					return (
+						<div style={{ padding: isMobile ? "0 10px 10px" : "0 8px 8px" }}>
+							<div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+								<input
+									type="range"
+									min={1} max={unitCfg.max} step={1}
+									value={Math.min(liveIntervalValue, unitCfg.max)}
+									onChange={e => setLiveIntervalValue(parseInt(e.target.value))}
+									style={{ flex: 1, accentColor: "var(--color-blue)", cursor: "pointer" }}
+								/>
+								<LiveUnitDropdown
+									value={liveIntervalUnit}
+									units={LIVE_UNITS}
+									mobile={isMobile}
+									onChange={u => { setLiveIntervalUnit(u); setLiveIntervalValue(1); }}
+								/>
+							</div>
+							<div style={{ textAlign: "center", fontSize: isMobile ? 12 : 10, color: "var(--color-foreground-sec)" }}>
+								{Math.min(liveIntervalValue, unitCfg.max)} {unitLabel}
+							</div>
+						</div>
+					);
+				})()}
 				{localChartType === "line" && (<>
 					<div style={{ height: 1, background: "var(--color-secondary)", margin: "4px 0 8px" }} />
 					{sectionTitle("Smoothing")}
 					<div style={{ padding: isMobile ? "0 10px 10px" : "0 8px 8px" }}>
-						<div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 6 }}>
-							<button
-								onClick={() => setLiveAvgBucket(v => Math.max(1, v - 1))}
-								style={{
-									width: isMobile ? 32 : 22, height: isMobile ? 32 : 22, flexShrink: 0,
-									borderRadius: 6, border: "1px solid var(--color-secondary)",
-									background: "color-mix(in srgb, var(--color-secondary) 35%, transparent)",
-									color: "var(--color-foreground-sec)", cursor: "pointer",
-									fontSize: isMobile ? 16 : 13, lineHeight: 1,
-									display: "flex", alignItems: "center", justifyContent: "center",
-								}}
-							>−</button>
-							<input
-								type="range" min={1} max={30} step={1}
-								value={liveAvgBucket}
-								onChange={e => setLiveAvgBucket(parseInt(e.target.value))}
-								style={{ flex: 1, accentColor: "var(--color-blue)", cursor: "pointer" }}
-							/>
-							<button
-								onClick={() => setLiveAvgBucket(v => Math.min(30, v + 1))}
-								style={{
-									width: isMobile ? 32 : 22, height: isMobile ? 32 : 22, flexShrink: 0,
-									borderRadius: 6, border: "1px solid var(--color-secondary)",
-									background: "color-mix(in srgb, var(--color-secondary) 35%, transparent)",
-									color: "var(--color-foreground-sec)", cursor: "pointer",
-									fontSize: isMobile ? 16 : 13, lineHeight: 1,
-									display: "flex", alignItems: "center", justifyContent: "center",
-								}}
-							>+</button>
-						</div>
+						<input
+							type="range" min={0} max={50} step={1}
+							value={liveSmoothingPct}
+							onChange={e => setLiveSmoothingPct(parseInt(e.target.value))}
+							style={{ width: "100%", accentColor: "var(--color-blue)", cursor: "pointer" }}
+						/>
 						<div style={{ textAlign: "center", fontSize: isMobile ? 12 : 10, color: "var(--color-foreground-sec)", marginTop: isMobile ? 4 : 3 }}>
-							{liveAvgBucket === 1 ? "Off" : `${liveAvgBucket}×`}
+							{liveSmoothingPct === 0 ? "Off" : `${liveSmoothingPct}%`}
 						</div>
 					</div>
 				</>)}
@@ -1753,7 +1799,7 @@ export default function AnalyticsPanel({ mode = "past", readOnly = false, defaul
 							<IconRefresh size={16} className="animate-spin" /> Loading…
 						</div>
 					) : localChartType === "line" ? (
-						<LineChart readings={smoothedReadings} deviceNames={deviceNames} colors={colors} visible={visible} hours={effectiveHours} metric={metric} groupBy={effectiveGroupBy} liveMode={mode === "live"} tension={mode === "live" && liveAvgBucket === 1 ? 0 : 1 / 6} />
+						<LineChart readings={smoothedReadings} deviceNames={deviceNames} colors={colors} visible={visible} hours={effectiveHours} metric={metric} groupBy={effectiveGroupBy} liveMode={mode === "live"} tension={mode === "live" && liveSmoothingPct === 0 ? 0 : 1 / 6} />
 					) : localChartType === "bar" ? (
 						<BarChart readings={readings} deviceNames={deviceNames} colors={colors} visible={visible} metric={metric} xAxis={effectiveBarXAxis} xAxisCustomN={effectiveBarN} xAxisCustomUnit={effectiveBarUnit} />
 					) : (

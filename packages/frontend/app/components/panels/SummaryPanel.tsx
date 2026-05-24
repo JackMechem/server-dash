@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { usePower } from "../../lib/DataProvider";
 import RangePicker, { type RangeUnit, RANGE_UNIT_HOURS } from "@/app/components/RangePicker";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -172,33 +173,31 @@ function BarChart({ labels, values, colors, type }: {
 // ── SummaryPanel ──────────────────────────────────────────────────────────────
 
 export default function SummaryPanel({ type }: { type: SummaryType }) {
+	const { power } = usePower();
 	const [rangeCount, setRangeCount] = useState(1);
 	const [rangeUnit, setRangeUnit] = useState<RangeUnit>("days");
 	const [reload, setReload] = useState(0);
-	const [current, setCurrent] = useState<DeviceReading[]>([]);
 	const [history, setHistory] = useState<HistoryEntry[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 
 	const hours = Math.max(1, rangeCount * RANGE_UNIT_HOURS[rangeUnit]);
 
+	// Current snapshot comes from shared context — no extra fetch needed.
+	const current: DeviceReading[] = (power?.devices ?? []).map(d => ({
+		name: d.name, watts: d.current_power_w, on: d.on,
+		today_wh: d.today_energy_wh ?? 0,
+		month_wh: d.month_energy_wh ?? 0,
+	}));
+
 	useEffect(() => {
 		setLoading(true);
 		setError(null);
-		Promise.all([
-			fetch("/api/power").then(r => { if (!r.ok) throw new Error("power"); return r.json(); }),
-			fetch(`/api/power/history?hours=${hours}`).then(r => { if (!r.ok) throw new Error("history"); return r.json(); }),
-		]).then(([cur, hist]) => {
-			setCurrent((cur.devices ?? []).map((d: {
-				name: string; current_power_w: number; on: boolean;
-				today_energy_wh?: number; month_energy_wh?: number;
-			}) => ({
-				name: d.name, watts: d.current_power_w, on: d.on,
-				today_wh: d.today_energy_wh ?? 0,
-				month_wh: d.month_energy_wh ?? 0,
-			})));
-			setHistory(hist.readings ?? []);
-		}).catch(e => setError(e.message)).finally(() => setLoading(false));
+		fetch(`/api/power/history?hours=${hours}`)
+			.then(r => { if (!r.ok) throw new Error("history"); return r.json(); })
+			.then(hist => { setHistory(hist.readings ?? []); })
+			.catch(e => setError(e.message))
+			.finally(() => setLoading(false));
 	}, [hours, reload]);
 
 	// Stable device list: current order first, then history-only extras

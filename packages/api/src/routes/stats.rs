@@ -97,6 +97,7 @@ pub async fn get_stats() -> Json<models::SystemStats> {
 
     Json(models::SystemStats {
         timestamp: chrono::Utc::now().to_rfc3339(),
+        hostname: System::host_name().unwrap_or_else(|| "server".to_string()),
         memory,
         cpu,
         disk,

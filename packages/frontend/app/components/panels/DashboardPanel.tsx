@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo } from "react";
-import { getStats, type Stats, type NetworkInterface } from "../../lib/getStats";
+import React, { useState, useEffect, useMemo } from "react";
+import { type Stats } from "../../lib/getStats";
 import AnalyticsPanel from "./AnalyticsPanel";
 import HelpTooltip from "../HelpTooltip";
+import { useStats } from "../../lib/DataProvider";
 
 // ── Types / constants ─────────────────────────────────────────────────────────
 
@@ -114,41 +115,11 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 // ── DashboardPanel ────────────────────────────────────────────────────────────
 
 export default function DashboardPanel({ isAuthed }: { isAuthed: boolean }) {
-	const [stats, setStats] = useState<Stats | null>(null);
-	const [netSpeed, setNetSpeed] = useState<{ rx: number; tx: number } | null>(null);
-	const prevNetRef = useRef<Record<string, NetworkInterface> | null>(null);
-	const prevTimeRef = useRef<number>(0);
+	const { stats, netSpeed } = useStats();
 
 	const [hours, setHours] = useState(24);
 	const [readings, setReadings] = useState<HistoryEntry[]>([]);
 	const [powerLoading, setPowerLoading] = useState(true);
-
-	// System stats poll
-	useEffect(() => {
-		const go = async () => {
-			try {
-				const now = Date.now();
-				const data = await getStats();
-				setStats(data);
-				const primary = Object.keys(data.network).find(
-					(k) => !k.startsWith("docker") && !k.startsWith("br-") && data.network[k].rx > 0,
-				);
-				if (primary && prevNetRef.current?.[primary] && prevTimeRef.current > 0) {
-					const elapsed = (now - prevTimeRef.current) / 1000;
-					const prev = prevNetRef.current[primary];
-					setNetSpeed({
-						rx: Math.max(0, (data.network[primary].rx - prev.rx) / elapsed),
-						tx: Math.max(0, (data.network[primary].tx - prev.tx) / elapsed),
-					});
-				}
-				prevNetRef.current = data.network;
-				prevTimeRef.current = now;
-			} catch {}
-		};
-		go();
-		const id = setInterval(go, 4000);
-		return () => clearInterval(id);
-	}, []);
 
 	// Power history fetch
 	useEffect(() => {

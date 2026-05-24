@@ -39,6 +39,7 @@ impl ActionResponse {
 #[derive(Serialize)]
 pub struct SystemStats {
     pub timestamp: String,
+    pub hostname: String,
     pub memory: MemoryStats,
     pub cpu: CpuStats,
     pub disk: DiskStats,
@@ -93,7 +94,7 @@ pub struct LoadAvgStats {
     pub fifteen: f64,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct TapoDeviceData {
     pub name: String,
     pub ip: String,
@@ -107,7 +108,7 @@ pub struct TapoDeviceData {
     pub month_runtime_min: u64,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct TapoPowerResponse {
     pub timestamp: String,
     pub devices: Vec<TapoDeviceData>,

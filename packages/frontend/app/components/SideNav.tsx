@@ -6,8 +6,8 @@ import { usePathname, useRouter } from "next/navigation";
 import {
 	IconHome2, IconMoon, IconSun, IconChevronsLeft, IconChevronsRight,
 	IconMenu2, IconX, IconCode, IconKey, IconLogout, IconUsers, IconChartLine,
-	IconChevronDown, IconBolt, IconHistory, IconHelpCircle,
-	IconCoin, IconPlug, IconBattery4,
+	IconChevronDown, IconChevronRight, IconBolt, IconHistory, IconHelpCircle,
+	IconCoin, IconPlug, IconBattery4, IconUserCog, IconSettings, IconArrowLeft,
 } from "@tabler/icons-react";
 import { useSetTheme } from "@/stores/useThemeStore";
 import { useHelpMode, useToggleHelpMode } from "@/stores/helpModeStore";
@@ -15,6 +15,7 @@ import HelpTooltip from "./HelpTooltip";
 import { useFocusedWindowState, requestViewChange } from "@/stores/windowStore";
 import { PANEL_SECTIONS, type PanelId } from "@/app/components/windows/types";
 import { SideNavWidgets } from "./SideNavWidgets";
+import SettingsModal from "./SettingsModal";
 
 const COLLAPSED_W = 52;
 
@@ -174,6 +175,8 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 	const [sidebarWidth, setSidebarWidth] = useState(220);
 	const [menuOpen, setMenuOpen] = useState(false);
 	const [auth, setAuth] = useState<boolean | null>(isAuthed ?? null);
+	const [settingsOpen, setSettingsOpen] = useState(false);
+	const [hostname, setHostname] = useState<string>("");
 	const isDragging = useRef(false);
 	const wrapperRef = useRef<HTMLDivElement>(null);
 
@@ -186,6 +189,10 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 		if (isAuthed !== undefined) return;
 		fetch("/api/auth/check").then((r) => setAuth(r.ok)).catch(() => setAuth(false));
 	}, [isAuthed]);
+
+	useEffect(() => {
+		fetch("/api/stats").then((r) => r.json()).then((d) => setHostname(d.hostname ?? "")).catch(() => {});
+	}, []);
 
 	useEffect(() => {
 		const onMove = (e: MouseEvent) => {
@@ -224,15 +231,45 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 					style={{ width: collapsed ? COLLAPSED_W : sidebarWidth, minWidth: collapsed ? COLLAPSED_W : 180 }}
 					className="flex flex-col py-[16px] overflow-hidden transition-[width] duration-200"
 				>
-					{/* Logo */}
-					<div className={collapsed ? "flex justify-center mb-[12px] shrink-0" : "px-[16px] mb-[16px] shrink-0"}>
-						<Link href="/">
-							<img src="/logo.svg" alt="logo" className={collapsed ? "max-h-[24px]" : "max-h-[36px]"} />
+					{/* Logo + identity header */}
+					<div className="shrink-0 px-[14px] mb-[14px]">
+						{/* Collapsed: centered logo only */}
+						<Link href="/" className={collapsed ? "flex justify-center" : "hidden"}>
+							<img src="/logo.svg" alt="logo" className="max-h-[24px]" />
 						</Link>
+						{/* Expanded: logo + name + status */}
+						<div className={collapsed ? "hidden" : "flex items-center gap-[10px]"}>
+							<Link href="/" className="shrink-0">
+								<img src="/logo.svg" alt="logo" className="max-h-[36px]" />
+							</Link>
+							<div className="flex flex-col min-w-0">
+								<span className="text-[14px] font-bold text-foreground leading-tight truncate">Jack Mechem</span>
+								{hostname && <span className="text-[11px] text-foreground-sec leading-tight truncate">{hostname}</span>}
+								<div className="flex items-center gap-[5px] mt-[3px]">
+									<span className="w-[6px] h-[6px] rounded-full shrink-0"
+										style={{ background: online ? "#5dd776" : "#7b899a", animation: online ? "pulse-dot 2s infinite" : "none" }} />
+									<span className="text-[11px] text-foreground-sec">{online ? "Online" : "Connecting..."}</span>
+								</div>
+							</div>
+						</div>
 					</div>
 
+					{/* Back to home — shown when not on the home route */}
+					{!isHome && (
+						<div className="px-[8px] mb-[4px] shrink-0">
+							<Link
+								href="/"
+								title={collapsed ? "Back to dashboard" : undefined}
+								className={navItemClass(false, collapsed)}
+							>
+								<IconArrowLeft size={16} className="shrink-0" />
+								{!collapsed && "Back to dashboard"}
+							</Link>
+						</div>
+					)}
+
 					{/* Auth/users route links */}
-					<nav className="flex flex-col gap-[2px] px-[8px] shrink-0">
+					<nav className="flex flex-col px-[8px] shrink-0">
 						{auth === false && (() => {
 							const active = pathname === "/auth";
 							return (
@@ -243,12 +280,41 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 							);
 						})()}
 						{auth && (() => {
-							const active = pathname === "/users";
+							const pageItemClass = (active: boolean) =>
+								"w-full flex items-center rounded-[9px] transition-all cursor-pointer border " +
+								(collapsed ? "justify-center py-[7px] " : "gap-[10px] px-[10px] py-[7px] text-[13px] whitespace-nowrap ") +
+								(active
+									? "bg-blue/10 border-blue/25 text-blue font-semibold shadow-sm shadow-blue/10"
+									: "text-foreground-sec border-transparent hover:bg-secondary/60 hover:border-secondary hover:text-foreground font-medium");
+
 							return (
-								<Link href="/users" title={collapsed ? "User Management" : undefined} className={navItemClass(active, collapsed)}>
-									<IconUsers size={16} strokeWidth={active ? 2.5 : 2} className="shrink-0" />
-									{!collapsed && "User Management"}
-								</Link>
+								<>
+									{!collapsed && (
+										<p className="px-[2px] mb-[5px] mt-[2px] text-[10px] font-bold tracking-wider text-foreground-sec/50 uppercase">
+											Pages
+										</p>
+									)}
+									<div className="flex flex-col gap-[4px]">
+										{(() => {
+											const active = pathname === "/users";
+											return (
+												<Link href="/users" title={collapsed ? "User Management" : undefined} className={pageItemClass(active)}>
+													<IconUsers size={16} strokeWidth={active ? 2.5 : 2} className="shrink-0" />
+													{!collapsed && <><span className="flex-1">User Management</span>{isHome && <IconChevronRight size={13} className="shrink-0 opacity-40" />}</>}
+												</Link>
+											);
+										})()}
+										{(() => {
+											const active = pathname === "/account";
+											return (
+												<Link href="/account" title={collapsed ? "Account" : undefined} className={pageItemClass(active)}>
+													<IconUserCog size={16} strokeWidth={active ? 2.5 : 2} className="shrink-0" />
+													{!collapsed && <><span className="flex-1">Account</span>{isHome && <IconChevronRight size={13} className="shrink-0 opacity-40" />}</>}
+												</Link>
+											);
+										})()}
+									</div>
+								</>
 							);
 						})()}
 					</nav>
@@ -276,16 +342,18 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 						</>
 					)}
 
-					{/* Online status */}
-					<div className="px-[8px] mb-[2px] shrink-0 mt-auto">
-						<div title={collapsed ? (online ? "Online" : "Connecting...") : undefined}
-							className={"w-full flex items-center rounded-[8px] font-medium text-foreground-sec " +
-								(collapsed ? "justify-center py-[7px]" : "gap-[10px] px-[10px] py-[7px] text-[13px] whitespace-nowrap")}>
-							<span className="w-[7px] h-[7px] rounded-full shrink-0"
-								style={{ background: online ? "#5dd776" : "#7b899a", animation: online ? "pulse-dot 2s infinite" : "none" }} />
-							{!collapsed && (online ? "Online" : "Connecting...")}
+					{/* Spacer — pushes bottom section down */}
+					<div className="mt-auto" />
+
+					{/* Online dot — only shown when collapsed (header handles expanded state) */}
+					{collapsed && (
+						<div className="px-[8px] mb-[2px] shrink-0">
+							<div title={online ? "Online" : "Connecting..."} className="w-full flex justify-center py-[7px]">
+								<span className="w-[7px] h-[7px] rounded-full shrink-0"
+									style={{ background: online ? "#5dd776" : "#7b899a", animation: online ? "pulse-dot 2s infinite" : "none" }} />
+							</div>
 						</div>
-					</div>
+					)}
 
 					{/* Dev console */}
 					{auth && (
@@ -328,6 +396,21 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 							</button>
 						</HelpTooltip>
 					</div>
+
+					{/* Settings */}
+					{auth && (
+						<div className="px-[8px] shrink-0">
+							<HelpTooltip text="Open settings." block hidden={collapsed}>
+								<button onClick={() => setSettingsOpen(true)} title={collapsed ? "Settings" : undefined}
+									className={"w-full flex items-center rounded-[8px] transition-colors cursor-pointer font-medium " +
+										(collapsed ? "justify-center py-[7px]" : "gap-[10px] px-[10px] py-[7px] text-[13px] whitespace-nowrap ") +
+										(settingsOpen ? "bg-blue/10 text-blue" : "text-foreground-sec hover:bg-secondary/50 hover:text-foreground")}>
+									<IconSettings size={16} strokeWidth={settingsOpen ? 2.5 : 2} className="shrink-0" />
+									{!collapsed && "Settings"}
+								</button>
+							</HelpTooltip>
+						</div>
+					)}
 
 					{/* Help mode toggle */}
 					<div className="px-[8px] shrink-0">
@@ -384,6 +467,15 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 			{/* Mobile dropdown menu */}
 			{menuOpen && (
 				<div className="lg:hidden fixed top-[52px] left-0 right-0 z-[997] bg-primary border-b border-secondary shadow-xl max-h-[80vh] overflow-y-auto">
+					{!isHome && (
+						<nav className="flex flex-col gap-[2px] p-[8px]">
+							<Link href="/" onClick={() => setMenuOpen(false)}
+								className="w-full flex items-center gap-[12px] px-[14px] py-[13px] text-[15px] rounded-[10px] transition-colors cursor-pointer text-foreground-sec hover:bg-secondary/50 hover:text-foreground font-medium">
+								<IconArrowLeft size={16} className="shrink-0" />
+								Back to dashboard
+							</Link>
+						</nav>
+					)}
 					{auth === false && (
 						<nav className="flex flex-col gap-[2px] p-[8px]">
 							<Link href="/auth" onClick={() => setMenuOpen(false)}
@@ -402,6 +494,19 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 								<IconUsers size={16} strokeWidth={pathname === "/users" ? 2.5 : 2} className="shrink-0" />
 								User Management
 							</Link>
+							<Link href="/account" onClick={() => setMenuOpen(false)}
+								className={"w-full flex items-center gap-[12px] px-[14px] py-[13px] text-[15px] rounded-[10px] transition-colors cursor-pointer " +
+									(pathname === "/account" ? "bg-blue/10 text-blue font-semibold" : "text-foreground-sec hover:bg-secondary/50 hover:text-foreground font-medium")}>
+								<IconUserCog size={16} strokeWidth={pathname === "/account" ? 2.5 : 2} className="shrink-0" />
+								Account
+							</Link>
+							<button
+								onClick={() => { setMenuOpen(false); setSettingsOpen(true); }}
+								className="w-full flex items-center gap-[12px] px-[14px] py-[13px] text-[15px] rounded-[10px] transition-colors cursor-pointer text-foreground-sec hover:bg-secondary/50 hover:text-foreground font-medium"
+							>
+								<IconSettings size={16} className="shrink-0" />
+								Settings
+							</button>
 						</nav>
 					)}
 
@@ -491,6 +596,8 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 					</div>
 				</div>
 			)}
+
+			{settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
 		</>
 	);
 };

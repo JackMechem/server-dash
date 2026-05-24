@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { IconLayoutGrid } from "@tabler/icons-react";
 import HelpTooltip from "./HelpTooltip";
-import { type Stats, type NetworkInterface } from "../lib/getStats";
+import { type Stats } from "../lib/getStats";
 import { type PowerData } from "../lib/getPower";
 import { formatBytes, statColor } from "../lib/utils";
+import { useStats, usePower } from "../lib/DataProvider";
 
 export type WidgetId = string;
 
@@ -142,11 +143,8 @@ export function SideNavWidgets() {
 	const [editing, setEditing] = useState(false);
 	const [mounted, setMounted] = useState(false);
 
-	const [stats, setStats] = useState<Stats | null>(null);
-	const [power, setPower] = useState<PowerData | null>(null);
-	const [netSpeed, setNetSpeed] = useState<{ rx: number; tx: number } | null>(null);
-	const prevNetRef = useRef<Record<string, NetworkInterface> | null>(null);
-	const lastFetchRef = useRef<number>(0);
+	const { stats, netSpeed } = useStats();
+	const { power } = usePower();
 
 	useEffect(() => {
 		setMounted(true);
@@ -154,50 +152,6 @@ export function SideNavWidgets() {
 			const saved = localStorage.getItem(STORAGE_KEY);
 			if (saved) setWidgets(JSON.parse(saved));
 		} catch {}
-	}, []);
-
-	useEffect(() => {
-		const fetchStats = async () => {
-			try {
-				const now = Date.now();
-				const res = await fetch("/api/stats");
-				if (!res.ok) return;
-				const data: Stats = await res.json();
-
-				if (prevNetRef.current && lastFetchRef.current > 0) {
-					const elapsed = (now - lastFetchRef.current) / 1000;
-					const primary = Object.keys(data.network).find(
-						(k) => !k.startsWith("docker") && !k.startsWith("br-") && data.network[k].rx > 0,
-					);
-					if (primary && prevNetRef.current[primary]) {
-						setNetSpeed({
-							rx: Math.max(0, (data.network[primary].rx - prevNetRef.current[primary].rx) / elapsed),
-							tx: Math.max(0, (data.network[primary].tx - prevNetRef.current[primary].tx) / elapsed),
-						});
-					}
-				}
-
-				prevNetRef.current = data.network;
-				lastFetchRef.current = now;
-				setStats(data);
-			} catch {}
-		};
-		fetchStats();
-		const id = setInterval(fetchStats, 4000);
-		return () => clearInterval(id);
-	}, []);
-
-	useEffect(() => {
-		const fetchPower = async () => {
-			try {
-				const res = await fetch("/api/power");
-				if (!res.ok) return;
-				setPower(await res.json());
-			} catch {}
-		};
-		fetchPower();
-		const id = setInterval(fetchPower, 3000);
-		return () => clearInterval(id);
 	}, []);
 
 	function updateWidget(index: number, id: WidgetId) {

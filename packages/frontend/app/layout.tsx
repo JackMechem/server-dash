@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import { DataProvider } from "./lib/DataProvider";
 
 const jetbrains = JetBrains_Mono({
 	subsets: ["latin"],
@@ -39,7 +40,9 @@ export default function RootLayout({
 				<script dangerouslySetInnerHTML={{ __html: noFlashScript }} />
 			</head>
 			<body className={jetbrains.className + " bg-[#ffffff] dark-theme:bg-[#0F1318] overflow-hidden"}>
+				<DataProvider>
 				{children}
+				</DataProvider>
 				<span className="fixed bottom-3 right-4 text-[10px] text-foreground-sec/40 select-none pointer-events-none">
 					v0.1.0
 				</span>

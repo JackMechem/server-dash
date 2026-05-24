@@ -1,21 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { getStats, type Stats } from "../../lib/getStats";
+import { useStats } from "../../lib/DataProvider";
 import ServicesCard from "../ServicesCard";
 
 export default function ServicesPanel({ isAuthed }: { isAuthed: boolean }) {
-	const [stats, setStats] = useState<Stats | null>(null);
-
-	useEffect(() => {
-		if (!isAuthed) return;
-		const go = async () => {
-			try { setStats(await getStats()); } catch {}
-		};
-		go();
-		const id = setInterval(go, 4000);
-		return () => clearInterval(id);
-	}, [isAuthed]);
+	const { stats } = useStats();
 
 	if (!isAuthed) {
 		return (
