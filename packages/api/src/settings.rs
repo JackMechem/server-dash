@@ -7,11 +7,21 @@ const SETTINGS_PATH: &str = "/var/lib/server-dash-api/settings.json";
 pub struct AppSettings {
     #[serde(default)]
     pub allow_system_login: bool,
+    /// WebAuthn relying party ID (e.g. "example.com"). Must be a suffix of the site's hostname.
+    #[serde(default)]
+    pub webauthn_rp_id: Option<String>,
+    /// Full origin URL used for WebAuthn (e.g. "https://dashboard.example.com").
+    #[serde(default)]
+    pub webauthn_origin: Option<String>,
 }
 
 impl Default for AppSettings {
     fn default() -> Self {
-        AppSettings { allow_system_login: false }
+        AppSettings {
+            allow_system_login: false,
+            webauthn_rp_id: None,
+            webauthn_origin: None,
+        }
     }
 }
 

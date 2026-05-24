@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { DataProvider } from "./lib/DataProvider";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 const jetbrains = JetBrains_Mono({
 	subsets: ["latin"],
@@ -9,7 +10,7 @@ const jetbrains = JetBrains_Mono({
 	variable: "--font-jetbrains",
 });
 
-const noFlashScript = `(function(){try{var raw=localStorage.getItem("theme");var v="light";if(raw==="dark"||raw==="light"){v=raw}else{try{v=JSON.parse(raw).state.theme}catch(e){}}if(v==="dark"){document.documentElement.classList.add("dark-theme")}}catch(e){}})();`;
+const noFlashScript = `(function(){try{var raw=localStorage.getItem("theme");var v="light";if(raw==="dark"||raw==="light"||raw==="black"){v=raw}else{try{v=JSON.parse(raw).state.theme}catch(e){}}if(v==="dark"){document.documentElement.classList.add("dark-theme")}else if(v==="black"){document.documentElement.classList.add("black-theme")}}catch(e){}})();`;
 
 export const viewport: Viewport = {
 	width: "device-width",
@@ -39,11 +40,13 @@ export default function RootLayout({
 			<head>
 				<script dangerouslySetInnerHTML={{ __html: noFlashScript }} />
 			</head>
-			<body className={jetbrains.className + " bg-[#ffffff] dark-theme:bg-[#0F1318] overflow-hidden"}>
-				<DataProvider>
-				{children}
-				</DataProvider>
-				<span className="fixed bottom-3 right-4 text-[10px] text-foreground-sec/40 select-none pointer-events-none">
+			<body className={jetbrains.className + " bg-background overflow-hidden"}>
+				<TooltipProvider>
+					<DataProvider>
+						{children}
+					</DataProvider>
+				</TooltipProvider>
+				<span className="fixed bottom-3 right-4 text-[10px] text-muted-foreground/40 select-none pointer-events-none">
 					v0.1.0
 				</span>
 			</body>

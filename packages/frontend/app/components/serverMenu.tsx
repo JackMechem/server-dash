@@ -2,6 +2,11 @@
 
 import { useState, useEffect } from "react";
 import HelpTooltip from "./HelpTooltip";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { StatusDot } from "@/components/ui/status-dot";
+import { SectionLabel } from "@/components/ui/section-label";
+import { Spinner } from "@/components/ui/spinner";
 
 const SERVICES = [
 	"syncthing",
@@ -41,9 +46,7 @@ export default function ControlPanel({ onClose }: { onClose: () => void }) {
 
 	async function handleService(action: string, service: string) {
 		setLoading((l) => ({ ...l, [`${service}-${action}`]: action }));
-		const res = await fetch(`/api/services/${service}/${action}`, {
-			method: "POST",
-		});
+		const res = await fetch(`/api/services/${service}/${action}`, { method: "POST" });
 		showToast(
 			res.ok ? `${service} ${action}ed` : `Failed to ${action} ${service}`,
 			res.ok,
@@ -66,25 +69,20 @@ export default function ControlPanel({ onClose }: { onClose: () => void }) {
 
 	async function handleLogs(service: string) {
 		const res = await fetch(`/api/services/${service}/logs`);
-		if (!res.ok) {
-			showToast("Failed to fetch logs", false);
-			return;
-		}
+		if (!res.ok) { showToast("Failed to fetch logs", false); return; }
 		const data = await res.json();
 		console.log(`Logs for ${service}:`, data.stdout);
 		showToast(`Logs fetched for ${service} — check console`, true);
 	}
 
 	async function handleReboot() {
-		if (!confirm("Reboot the server? This will disconnect all sessions."))
-			return;
+		if (!confirm("Reboot the server? This will disconnect all sessions.")) return;
 		const res = await fetch("/api/system/reboot", { method: "POST" });
 		showToast(res.ok ? "Rebooting..." : "Reboot failed", res.ok);
 	}
 
 	async function handleShutdown() {
-		if (!confirm("Shut down the server? You will need physical access to turn it back on."))
-			return;
+		if (!confirm("Shut down the server? You will need physical access to turn it back on.")) return;
 		const res = await fetch("/api/system/shutdown", { method: "POST" });
 		showToast(res.ok ? "Shutting down..." : "Shutdown failed", res.ok);
 	}
@@ -92,103 +90,92 @@ export default function ControlPanel({ onClose }: { onClose: () => void }) {
 	const isLoading = (service: string, action: string) =>
 		loading[`${service}-${action}`] !== undefined;
 
-	const isActive = (svc: string) => statuses[svc] === "active";
+	const isActive   = (svc: string) => statuses[svc] === "active";
 	const isInactive = (svc: string) =>
-		statuses[svc] === "inactive" ||
-		statuses[svc] === "failed" ||
-		statuses[svc] === "dead";
+		statuses[svc] === "inactive" || statuses[svc] === "failed" || statuses[svc] === "dead";
 
-	function statusDot(svc: string) {
+	const dotStatus = (svc: string): "online" | "offline" | "warning" => {
 		const s = statuses[svc];
-		const color =
-			s === "active"
-				? "bg-green-400"
-				: s === "failed"
-					? "bg-red-400"
-					: "bg-gray-300";
-		return <span className={`w-2 h-2 rounded-full shrink-0 ${color}`} />;
-	}
-
-	function btnClass(svc: string, action: string): string {
-		const active = isActive(svc);
-		const inactive = isInactive(svc);
-		const busy = isLoading(svc, action);
-		const base =
-			"rounded-md px-2.5 py-1 text-[13px] whitespace-nowrap border transition-colors";
-
-		if (busy) return `${base} border-gray-200 text-gray-300 cursor-not-allowed`;
-		if (action === "start" && inactive)
-			return `${base} bg-green-50 border-green-200 text-green-700 cursor-pointer`;
-		if (action === "stop" && active)
-			return `${base} bg-red-50 border-red-200 text-red-500 cursor-pointer`;
-		if (action === "restart" && active)
-			return `${base} bg-blue-50 border-blue-200 text-blue-500 cursor-pointer`;
-		return `${base} border-gray-200 text-gray-300 cursor-default`;
-	}
+		if (s === "active") return "online";
+		if (s === "failed") return "warning";
+		return "offline";
+	};
 
 	return (
 		<>
 			{/* Backdrop */}
-			<div onClick={onClose} className="fixed inset-0 bg-black/15 z-40" />
+			<div onClick={onClose} className="fixed inset-0 bg-black/40 z-40" />
 
 			{/* Panel */}
-			<div className="fixed top-0 right-0 bottom-0 md:w-[480px] w-full bg-white border-l border-gray-100 z-50 overflow-y-auto p-8">
+			<div className="fixed top-0 right-0 bottom-0 md:w-[480px] w-full bg-background border-l border-border z-50 overflow-y-auto p-8">
 				{/* Header */}
 				<div className="flex items-start justify-between mb-8">
 					<div>
-						<p className="text-[13px] text-blue-500 mb-1.5">Control panel</p>
-						<h2 className="text-[22px] font-normal text-gray-900 tracking-tight m-0">
+						<p className="text-[11px] font-semibold text-primary mb-2">Control panel</p>
+						<h2 className="text-[22px] font-normal text-foreground tracking-tight">
 							Manage services
 						</h2>
 					</div>
 					<HelpTooltip text="Close this control panel.">
-						<button
-							onClick={onClose}
-							className="border border-gray-200 rounded-lg px-3.5 py-1.5 text-[13px] text-gray-400 cursor-pointer hover:bg-gray-50 transition-colors"
-						>
-							Close
-						</button>
+						<Button variant="outline" size="sm" onClick={onClose}>Close</Button>
 					</HelpTooltip>
 				</div>
 
 				{/* Services */}
-				<div className="border-t border-gray-100 pt-6 mb-6">
-					<p className="text-[13px] text-gray-300 mb-3">Services</p>
+				<div className="mb-6">
+					<SectionLabel divider className="mb-3">Services</SectionLabel>
 					<div className="flex flex-col gap-2">
 						{SERVICES.map((svc) => (
 							<div
 								key={svc}
-								className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 flex md:flex-row flex-col items-center justify-between gap-3"
+								className="bg-muted/30 border border-border rounded-xl px-4 py-3 flex md:flex-row flex-col items-center justify-between gap-3"
 							>
 								<div className="flex items-center gap-2.5 flex-1 min-w-0">
-									{statusDot(svc)}
-									<p className="text-[14px] text-gray-900 m-0 truncate">
-										{svc}
-									</p>
+									<StatusDot status={dotStatus(svc)} size="md" />
+									<p className="text-sm text-foreground truncate">{svc}</p>
 								</div>
 								<div className="flex gap-1.5 shrink-0">
-									{["start", "stop", "restart"].map((action) => (
-										<HelpTooltip key={action} text={`${action.charAt(0).toUpperCase() + action.slice(1)} the ${svc} service.`}>
-											<button
-												onClick={() =>
-													!isLoading(svc, action) && handleService(action, svc)
-												}
-												disabled={isLoading(svc, action)}
-												className={btnClass(svc, action)}
-											>
-												{isLoading(svc, action)
-													? "..."
-													: action.charAt(0).toUpperCase() + action.slice(1)}
-											</button>
-										</HelpTooltip>
-									))}
+									<HelpTooltip text={`Start the ${svc} service.`}>
+										<Button
+											size="xs"
+											variant="success"
+											onClick={() => !isLoading(svc, "start") && handleService("start", svc)}
+											disabled={isLoading(svc, "start") || !isInactive(svc)}
+										>
+											{isLoading(svc, "start") ? <Spinner size="xs" /> : null}
+											Start
+										</Button>
+									</HelpTooltip>
+									<HelpTooltip text={`Stop the ${svc} service.`}>
+										<Button
+											size="xs"
+											variant="destructive"
+											onClick={() => !isLoading(svc, "stop") && handleService("stop", svc)}
+											disabled={isLoading(svc, "stop") || !isActive(svc)}
+										>
+											{isLoading(svc, "stop") ? <Spinner size="xs" /> : null}
+											Stop
+										</Button>
+									</HelpTooltip>
+									<HelpTooltip text={`Restart the ${svc} service.`}>
+										<Button
+											size="xs"
+											variant="outline"
+											onClick={() => !isLoading(svc, "restart") && handleService("restart", svc)}
+											disabled={isLoading(svc, "restart") || !isActive(svc)}
+										>
+											{isLoading(svc, "restart") ? <Spinner size="xs" /> : null}
+											Restart
+										</Button>
+									</HelpTooltip>
 									<HelpTooltip text={`Fetch and display recent logs for the ${svc} service.`}>
-										<button
+										<Button
+											size="xs"
+											variant="secondary"
 											onClick={() => handleLogs(svc)}
-											className="rounded-md px-2.5 py-1 text-[13px] whitespace-nowrap border border-blue-100 text-blue-400 cursor-pointer hover:bg-blue-50 transition-colors"
 										>
 											Logs
-										</button>
+										</Button>
 									</HelpTooltip>
 								</div>
 							</div>
@@ -197,57 +184,35 @@ export default function ControlPanel({ onClose }: { onClose: () => void }) {
 				</div>
 
 				{/* System */}
-				<div className="border-t border-gray-100 pt-6">
-					<p className="text-[13px] text-gray-300 mb-3">System</p>
-					<div className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3.5 flex items-center justify-between">
-						<div>
-							<p className="text-[14px] text-gray-900 m-0 mb-0.5">
-								Reboot server
-							</p>
-							<p className="text-[12px] text-gray-400 m-0">
-								Immediately restarts the machine
-							</p>
+				<div>
+					<SectionLabel divider className="mb-3">System</SectionLabel>
+					<div className="flex flex-col gap-2">
+						<div className="bg-muted/30 border border-border rounded-xl px-4 py-3.5 flex items-center justify-between gap-4">
+							<div>
+								<p className="text-sm text-foreground mb-0.5">Reboot server</p>
+								<p className="text-xs text-muted-foreground">Immediately restarts the machine</p>
+							</div>
+							<HelpTooltip text="Immediately restart the server. All services will briefly go offline.">
+								<Button variant="destructive" size="sm" onClick={handleReboot}>Reboot</Button>
+							</HelpTooltip>
 						</div>
-						<HelpTooltip text="Immediately restart the server. All services will briefly go offline.">
-							<button
-								onClick={handleReboot}
-								className="border border-red-200 rounded-lg px-3.5 py-1.5 text-[13px] text-red-400 cursor-pointer hover:bg-red-50 transition-colors whitespace-nowrap"
-							>
-								Reboot
-							</button>
-						</HelpTooltip>
+						<div className="bg-muted/30 border border-border rounded-xl px-4 py-3.5 flex items-center justify-between gap-4">
+							<div>
+								<p className="text-sm text-foreground mb-0.5">Shut down server</p>
+								<p className="text-xs text-muted-foreground">Powers off the machine</p>
+							</div>
+							<HelpTooltip text="Power off the server completely. You will need physical access to turn it back on.">
+								<Button variant="destructive" size="sm" onClick={handleShutdown}>Shut down</Button>
+							</HelpTooltip>
+						</div>
 					</div>
-				</div>
-				<div className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3.5 flex items-center justify-between mt-2">
-					<div>
-						<p className="text-[14px] text-gray-900 m-0 mb-0.5">
-							Shut down server
-						</p>
-						<p className="text-[12px] text-gray-400 m-0">
-							Powers off the machine
-						</p>
-					</div>
-					<HelpTooltip text="Power off the server completely. You will need physical access to turn it back on.">
-						<button
-							onClick={handleShutdown}
-							className="border border-red-200 rounded-lg px-3.5 py-1.5 text-[13px] text-red-400 cursor-pointer hover:bg-red-50 transition-colors whitespace-nowrap"
-						>
-							Shut down
-						</button>
-					</HelpTooltip>
 				</div>
 
 				{/* Toast */}
 				{toast && (
-					<div
-						className={`mt-6 px-4 py-3 rounded-lg text-[13px] border ${
-							toast.ok
-								? "bg-green-50 text-green-700 border-green-200"
-								: "bg-red-50 text-red-500 border-red-200"
-						}`}
-					>
-						{toast.message}
-					</div>
+					<Alert variant={toast.ok ? "success" : "destructive"} className="mt-6">
+						<AlertDescription>{toast.message}</AlertDescription>
+					</Alert>
 				)}
 			</div>
 		</>

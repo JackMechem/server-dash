@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
-	const { username, password } = await req.json();
+	const { username, password, bypass_2fa } = await req.json();
 
-	const res = await fetch("http://localhost:3001/auth/login", {
+	const url = bypass_2fa
+		? "http://localhost:3001/auth/login?bypass_2fa=1"
+		: "http://localhost:3001/auth/login";
+
+	const res = await fetch(url, {
 		method: "POST",
 		headers: {
 			Authorization:

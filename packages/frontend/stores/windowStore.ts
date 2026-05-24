@@ -40,3 +40,24 @@ export function subscribeViewChange(fn: ViewChangeListener): () => void {
 	viewChangeListeners.add(fn);
 	return () => { viewChangeListeners.delete(fn); };
 }
+
+// ── Split requests (command palette → focused pane) ───────────────────────────
+
+interface SplitRequest {
+	leafId: string;
+	dir: "h" | "v";
+	newFirst: boolean;
+	panelId: PanelId;
+}
+
+type SplitListener = (req: SplitRequest) => void;
+const splitListeners = new Set<SplitListener>();
+
+export function requestSplit(leafId: string, dir: "h" | "v", newFirst: boolean, panelId: PanelId) {
+	splitListeners.forEach((l) => l({ leafId, dir, newFirst, panelId }));
+}
+
+export function subscribeSplit(fn: SplitListener): () => void {
+	splitListeners.add(fn);
+	return () => { splitListeners.delete(fn); };
+}

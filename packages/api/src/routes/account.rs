@@ -2,13 +2,15 @@ use axum::{
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Json},
 };
+use base64::{Engine, engine::general_purpose};
 use serde::Deserialize;
 
 use crate::app_credentials::{
-    find_by_username, hash_password, load_all, save_all, verify_app_password, AppCredential,
-    PermissionLevel,
+    find_by_username, hash_password, load_all, resolve_effective_user, save_all,
+    verify_app_password, AppCredential, PermissionLevel,
 };
-use crate::auth::get_token_subject;
+use crate::auth::{get_token_subject, load_credentials};
+use crate::totp::has_totp;
 
 // GET /account — returns the current user's app credential info
 pub async fn get_account(headers: HeaderMap) -> impl IntoResponse {
@@ -17,12 +19,31 @@ pub async fn get_account(headers: HeaderMap) -> impl IntoResponse {
         None => return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response(),
     };
 
+    let effective = resolve_effective_user(&username);
+
+    let credentials: Vec<serde_json::Value> = load_credentials(&effective)
+        .map(|s| {
+            s.credentials
+                .iter()
+                .map(|c| {
+                    let id = general_purpose::URL_SAFE_NO_PAD.encode(c.cred_id());
+                    let label = s.labels.get(&id).cloned();
+                    serde_json::json!({ "id": id, "label": label })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let has_totp_val = has_totp(&effective);
+
     match find_by_username(&username) {
         Some(cred) => Json(serde_json::json!({
             "username": cred.username,
             "system_user": cred.system_user,
             "permission_level": cred.permission_level,
             "has_app_credential": true,
+            "credentials": credentials,
+            "has_totp": has_totp_val,
         }))
         .into_response(),
         None => Json(serde_json::json!({
@@ -30,6 +51,8 @@ pub async fn get_account(headers: HeaderMap) -> impl IntoResponse {
             "system_user": null,
             "permission_level": "admin-pl1",
             "has_app_credential": false,
+            "credentials": credentials,
+            "has_totp": has_totp_val,
         }))
         .into_response(),
     }
@@ -40,10 +63,9 @@ pub struct CreateAccountBody {
     pub app_username: String,
     pub app_password: String,
     pub system_user: Option<String>,
-    pub system_password: Option<String>,
 }
 
-// POST /account — create an app credential, optionally linked to a system user
+// POST /account — create an app credential
 pub async fn post_account(
     headers: HeaderMap,
     Json(body): Json<CreateAccountBody>,
@@ -52,23 +74,6 @@ pub async fn post_account(
         Some(u) => u,
         None => return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response(),
     };
-
-    // If a system user is provided, verify its password
-    if let Some(ref sys_user) = body.system_user {
-        let sys_pw = match &body.system_password {
-            Some(p) => p,
-            None => {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    "System user password required when linking a system user",
-                )
-                    .into_response()
-            }
-        };
-        if !crate::auth::verify_password(sys_user, sys_pw) {
-            return (StatusCode::UNAUTHORIZED, "Invalid system user credentials").into_response();
-        }
-    }
 
     let app_username = body.app_username.trim().to_string();
     if app_username.is_empty() || app_username.len() > 64 {
@@ -115,11 +120,9 @@ pub struct UpdateAccountBody {
     pub new_username: Option<String>,
     pub current_password: Option<String>,
     pub new_password: Option<String>,
-    pub system_user: Option<String>,
-    pub system_password: Option<String>,
 }
 
-// PUT /account — update username, password, or linked system user
+// PUT /account — update username or password
 pub async fn put_account(
     headers: HeaderMap,
     Json(body): Json<UpdateAccountBody>,
@@ -163,23 +166,6 @@ pub async fn put_account(
                     .into_response();
             }
         };
-    }
-
-    if let Some(new_sys_user) = &body.system_user {
-        let sys_pw = match &body.system_password {
-            Some(p) => p,
-            None => {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    "System user password required to change linked user",
-                )
-                    .into_response()
-            }
-        };
-        if !crate::auth::verify_password(new_sys_user, sys_pw) {
-            return (StatusCode::UNAUTHORIZED, "Invalid system user credentials").into_response();
-        }
-        all[pos].system_user = Some(new_sys_user.clone());
     }
 
     if let Some(new_u) = body.new_username.as_deref().map(str::trim) {

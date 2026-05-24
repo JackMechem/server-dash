@@ -110,6 +110,10 @@ async fn main() {
             put(routes::users::rename_credential),
         )
         .route("/users/{username}/totp", delete(totp::delete_totp))
+        .route(
+            "/users/{username}/password",
+            put(routes::users::reset_password),
+        )
         .route("/power/{device}/on", post(routes::power::power_on))
         .route("/power/{device}/off", post(routes::power::power_off))
         .route(

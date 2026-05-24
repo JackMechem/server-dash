@@ -4,18 +4,19 @@ import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-	IconHome2, IconMoon, IconSun, IconChevronsLeft, IconChevronsRight,
-	IconMenu2, IconX, IconCode, IconKey, IconLogout, IconUsers, IconChartLine,
+	IconHome2, IconMoon, IconSun, IconMoonStars, IconChevronsLeft, IconChevronsRight,
+	IconMenu2, IconX, IconKey, IconLogout, IconUsers, IconTerminal2, IconDownload,
 	IconChevronDown, IconChevronRight, IconBolt, IconHistory, IconHelpCircle,
-	IconCoin, IconPlug, IconBattery4, IconUserCog, IconSettings, IconArrowLeft,
+	IconCoin, IconPlug, IconBattery4, IconUserCog, IconArrowLeft, IconCheck,
 } from "@tabler/icons-react";
-import { useSetTheme } from "@/stores/useThemeStore";
+import { useTheme, useSetTheme, type Theme } from "@/stores/useThemeStore";
+import { createPortal } from "react-dom";
 import { useHelpMode, useToggleHelpMode } from "@/stores/helpModeStore";
 import HelpTooltip from "./HelpTooltip";
 import { useFocusedWindowState, requestViewChange } from "@/stores/windowStore";
 import { PANEL_SECTIONS, type PanelId } from "@/app/components/windows/types";
 import { SideNavWidgets } from "./SideNavWidgets";
-import SettingsModal from "./SettingsModal";
+import { ExportDrawer } from "./AppMenubar";
 
 const COLLAPSED_W = 52;
 
@@ -34,9 +35,9 @@ const ANALYTICS_ICONS: Record<PanelId, React.ElementType> = {
 
 interface SideNavProps {
 	online: boolean;
-	devConsoleOpen: boolean;
-	onToggleDevConsole: () => void;
 	isAuthed?: boolean;
+	devConsoleOpen?: boolean;
+	onToggleDevConsole?: () => void;
 }
 
 // ── Window nav (only shown on /) ──────────────────────────────────────────────
@@ -145,7 +146,7 @@ function WindowNav({ collapsed, focusedPanelId }: { collapsed: boolean; focusedP
 													"w-full flex items-center gap-[8px] px-[10px] py-[6px] text-[12px] rounded-[8px] transition-colors cursor-pointer",
 													active
 														? "bg-blue/10 text-blue font-semibold"
-														: "text-foreground-sec hover:bg-secondary/50 hover:text-foreground font-medium",
+														: "text-foreground-sec hover:bg-secondary/50 active:bg-secondary/70 hover:text-foreground font-medium",
 												].join(" ")}
 											>
 												<Icon size={13} strokeWidth={active ? 2.5 : 2} className="shrink-0" />
@@ -165,9 +166,10 @@ function WindowNav({ collapsed, focusedPanelId }: { collapsed: boolean; focusedP
 
 // ── Desktop sidebar ───────────────────────────────────────────────────────────
 
-const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideNavProps) => {
+const SideNav = ({ online, isAuthed, devConsoleOpen, onToggleDevConsole }: SideNavProps) => {
 	const pathname = usePathname();
 	const router = useRouter();
+	const theme = useTheme();
 	const setTheme = useSetTheme();
 	const helpMode = useHelpMode();
 	const toggleHelp = useToggleHelpMode();
@@ -175,8 +177,12 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 	const [sidebarWidth, setSidebarWidth] = useState(220);
 	const [menuOpen, setMenuOpen] = useState(false);
 	const [auth, setAuth] = useState<boolean | null>(isAuthed ?? null);
-	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [hostname, setHostname] = useState<string>("");
+	const [exportOpen, setExportOpen] = useState(false);
+	const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
+	const [themeDropdownPos, setThemeDropdownPos] = useState<{ x: number; y: number } | null>(null);
+	const themeButtonRef = useRef<HTMLButtonElement>(null);
+	const themeDropdownRef = useRef<HTMLDivElement>(null);
 	const isDragging = useRef(false);
 	const wrapperRef = useRef<HTMLDivElement>(null);
 
@@ -193,6 +199,18 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 	useEffect(() => {
 		fetch("/api/stats").then((r) => r.json()).then((d) => setHostname(d.hostname ?? "")).catch(() => {});
 	}, []);
+
+	useEffect(() => {
+		if (!themeDropdownOpen) return;
+		const close = (e: MouseEvent) => {
+			const t = e.target as Node;
+			if (!themeButtonRef.current?.contains(t) && !themeDropdownRef.current?.contains(t)) {
+				setThemeDropdownOpen(false);
+			}
+		};
+		document.addEventListener("mousedown", close);
+		return () => document.removeEventListener("mousedown", close);
+	}, [themeDropdownOpen]);
 
 	useEffect(() => {
 		const onMove = (e: MouseEvent) => {
@@ -214,6 +232,50 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 		router.push("/auth");
 	}
 
+	const THEME_OPTIONS: { value: Theme; label: string; icon: React.ElementType }[] = [
+		{ value: "light", label: "Light", icon: IconSun },
+		{ value: "dark",  label: "Dark",  icon: IconMoon },
+		{ value: "black", label: "Black", icon: IconMoonStars },
+	];
+
+	const currentThemeIcon = THEME_OPTIONS.find((o) => o.value === theme)?.icon ?? IconSun;
+	const CurrentThemeIcon = currentThemeIcon;
+
+	function openThemeDropdown(e: React.MouseEvent<HTMLButtonElement>) {
+		const rect = e.currentTarget.getBoundingClientRect();
+		const dropH = 120; // ~3 items
+		const y = Math.min(rect.top, window.innerHeight - dropH - 8);
+		setThemeDropdownPos({ x: rect.right + 8, y });
+		setThemeDropdownOpen((v) => !v);
+	}
+
+	const themeDropdown = themeDropdownOpen && themeDropdownPos && typeof document !== "undefined"
+		? createPortal(
+			<div
+				ref={themeDropdownRef}
+				style={{ position: "fixed", left: themeDropdownPos.x, top: themeDropdownPos.y, zIndex: 9999 }}
+				className="w-[130px] bg-card border border-border rounded-xl shadow-xl py-1 overflow-hidden"
+			>
+				{THEME_OPTIONS.map(({ value, label, icon: Icon }) => (
+					<button
+						key={value}
+						onClick={() => { setTheme(value); setThemeDropdownOpen(false); }}
+						className={`w-full flex items-center gap-2.5 px-3 py-2 text-[13px] transition-colors cursor-pointer ${
+							theme === value
+								? "text-foreground bg-primary/20"
+								: "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+						}`}
+					>
+						<Icon size={14} className="shrink-0" />
+						{label}
+						{theme === value && <IconCheck size={12} className="ml-auto shrink-0" />}
+					</button>
+				))}
+			</div>,
+			document.body
+		)
+		: null;
+
 	const navItemClass = (active: boolean, col: boolean) =>
 		"w-full flex items-center rounded-[8px] transition-colors cursor-pointer " +
 		(col
@@ -221,7 +283,7 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 			: "gap-[10px] px-[10px] py-[7px] text-[13px] whitespace-nowrap ") +
 		(active
 			? "bg-blue/10 text-blue font-semibold"
-			: "text-foreground-sec hover:bg-secondary/50 hover:text-foreground font-medium");
+			: "text-foreground-sec hover:bg-secondary/50 active:bg-secondary/70 hover:text-foreground font-medium");
 
 	return (
 		<>
@@ -290,7 +352,7 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 							return (
 								<>
 									{!collapsed && (
-										<p className="px-[2px] mb-[5px] mt-[2px] text-[10px] font-bold tracking-wider text-foreground-sec/50 uppercase">
+										<p className="px-[2px] mb-[5px] mt-[2px] text-[11px] font-semibold text-foreground-sec/60">
 											Pages
 										</p>
 									)}
@@ -324,7 +386,7 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 						<>
 							{(auth !== null) && <div className="mx-[8px] my-[8px] border-t border-secondary shrink-0" />}
 							{!collapsed && (
-								<p className="px-[18px] mb-[4px] text-[10px] font-semibold text-foreground-sec/60 uppercase tracking-wider shrink-0">
+								<p className="px-[18px] mb-[4px] text-[11px] font-semibold text-foreground-sec/60 shrink-0">
 									Views
 								</p>
 							)}
@@ -355,21 +417,6 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 						</div>
 					)}
 
-					{/* Dev console */}
-					{auth && (
-						<div className="px-[8px] shrink-0">
-							<HelpTooltip text="Open the dev console to inspect live API requests and send test requests." block hidden={collapsed}>
-								<button onClick={onToggleDevConsole} title={collapsed ? "Dev Console" : undefined}
-									className={"w-full flex items-center rounded-[8px] transition-colors cursor-pointer font-medium " +
-										(collapsed ? "justify-center py-[7px]" : "gap-[10px] px-[10px] py-[7px] text-[13px] whitespace-nowrap ") +
-										(devConsoleOpen ? "bg-blue/10 text-blue" : "text-foreground-sec hover:bg-secondary/50 hover:text-foreground")}>
-									<IconCode size={16} className="shrink-0" />
-									{!collapsed && "Dev Console"}
-								</button>
-							</HelpTooltip>
-						</div>
-					)}
-
 					{/* Logout */}
 					{auth && (
 						<div className="px-[8px] shrink-0">
@@ -384,33 +431,22 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 						</div>
 					)}
 
-					{/* Theme toggle */}
+					{/* Theme picker */}
 					<div className="px-[8px] mt-[4px] shrink-0">
-						<HelpTooltip text="Switch between light and dark color scheme." block hidden={collapsed}>
-							<button onClick={setTheme} title={collapsed ? "Toggle theme" : undefined}
+						<HelpTooltip text="Switch color theme: Light, Dark, or Black." block hidden={collapsed}>
+							<button
+								ref={themeButtonRef}
+								onClick={openThemeDropdown}
+								title={collapsed ? "Color theme" : undefined}
 								className={"w-full flex items-center rounded-[8px] transition-colors cursor-pointer text-foreground-sec hover:bg-secondary/50 hover:text-foreground font-medium " +
-									(collapsed ? "justify-center py-[7px]" : "gap-[10px] px-[10px] py-[7px] text-[13px] whitespace-nowrap")}>
-								<IconMoon size={16} className="shrink-0 dark-theme:hidden" />
-								<IconSun size={16} className="shrink-0 hidden dark-theme:block" />
-								{!collapsed && <><span className="dark-theme:hidden">Dark mode</span><span className="hidden dark-theme:block">Light mode</span></>}
+									(collapsed ? "justify-center py-[7px]" : "gap-[10px] px-[10px] py-[7px] text-[13px] whitespace-nowrap")}
+							>
+								<CurrentThemeIcon size={16} className="shrink-0" />
+								{!collapsed && <span className="capitalize">{theme === "light" ? "Light" : theme === "dark" ? "Dark" : "Black"}</span>}
+								{!collapsed && <IconChevronDown size={12} className="ml-auto shrink-0 opacity-50" />}
 							</button>
 						</HelpTooltip>
 					</div>
-
-					{/* Settings */}
-					{auth && (
-						<div className="px-[8px] shrink-0">
-							<HelpTooltip text="Open settings." block hidden={collapsed}>
-								<button onClick={() => setSettingsOpen(true)} title={collapsed ? "Settings" : undefined}
-									className={"w-full flex items-center rounded-[8px] transition-colors cursor-pointer font-medium " +
-										(collapsed ? "justify-center py-[7px]" : "gap-[10px] px-[10px] py-[7px] text-[13px] whitespace-nowrap ") +
-										(settingsOpen ? "bg-blue/10 text-blue" : "text-foreground-sec hover:bg-secondary/50 hover:text-foreground")}>
-									<IconSettings size={16} strokeWidth={settingsOpen ? 2.5 : 2} className="shrink-0" />
-									{!collapsed && "Settings"}
-								</button>
-							</HelpTooltip>
-						</div>
-					)}
 
 					{/* Help mode toggle */}
 					<div className="px-[8px] shrink-0">
@@ -452,7 +488,7 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 			</div>
 
 			{/* Mobile header */}
-			<div className="lg:hidden fixed top-0 left-0 right-0 z-[998] h-[52px] bg-primary border-b border-secondary flex items-center px-[16px]">
+			<div className="lg:hidden fixed top-0 left-0 right-0 z-[998] h-[52px] bg-card border-b border-border flex items-center px-[16px]">
 				<Link href="/" onClick={() => setMenuOpen(false)}>
 					<img src="/logo.svg" alt="logo" className="max-h-[22px]" />
 				</Link>
@@ -466,11 +502,17 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 
 			{/* Mobile dropdown menu */}
 			{menuOpen && (
-				<div className="lg:hidden fixed top-[52px] left-0 right-0 z-[997] bg-primary border-b border-secondary shadow-xl max-h-[80vh] overflow-y-auto">
+				<>
+				{/* Backdrop — tap outside to close */}
+				<div
+					className="lg:hidden fixed inset-0 top-[52px] z-[998]"
+					onClick={() => setMenuOpen(false)}
+				/>
+				<div className="lg:hidden fixed top-[52px] left-0 right-0 bottom-0 z-[999] bg-card border-t border-border shadow-2xl overflow-y-auto">
 					{!isHome && (
 						<nav className="flex flex-col gap-[2px] p-[8px]">
 							<Link href="/" onClick={() => setMenuOpen(false)}
-								className="w-full flex items-center gap-[12px] px-[14px] py-[13px] text-[15px] rounded-[10px] transition-colors cursor-pointer text-foreground-sec hover:bg-secondary/50 hover:text-foreground font-medium">
+								className="w-full flex items-center gap-[12px] px-[14px] py-[13px] text-[15px] rounded-[10px] transition-colors cursor-pointer text-foreground-sec hover:bg-secondary/50 active:bg-secondary/70 hover:text-foreground font-medium">
 								<IconArrowLeft size={16} className="shrink-0" />
 								Back to dashboard
 							</Link>
@@ -480,7 +522,7 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 						<nav className="flex flex-col gap-[2px] p-[8px]">
 							<Link href="/auth" onClick={() => setMenuOpen(false)}
 								className={"w-full flex items-center gap-[12px] px-[14px] py-[13px] text-[15px] rounded-[10px] transition-colors cursor-pointer " +
-									(pathname === "/auth" ? "bg-blue/10 text-blue font-semibold" : "text-foreground-sec hover:bg-secondary/50 hover:text-foreground font-medium")}>
+									(pathname === "/auth" ? "bg-blue/10 text-blue font-semibold" : "text-foreground-sec hover:bg-secondary/50 active:bg-secondary/70 hover:text-foreground font-medium")}>
 								<IconKey size={16} strokeWidth={pathname === "/auth" ? 2.5 : 2} className="shrink-0" />
 								Auth
 							</Link>
@@ -490,32 +532,25 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 						<nav className="flex flex-col gap-[2px] p-[8px]">
 							<Link href="/users" onClick={() => setMenuOpen(false)}
 								className={"w-full flex items-center gap-[12px] px-[14px] py-[13px] text-[15px] rounded-[10px] transition-colors cursor-pointer " +
-									(pathname === "/users" ? "bg-blue/10 text-blue font-semibold" : "text-foreground-sec hover:bg-secondary/50 hover:text-foreground font-medium")}>
+									(pathname === "/users" ? "bg-blue/10 text-blue font-semibold" : "text-foreground-sec hover:bg-secondary/50 active:bg-secondary/70 hover:text-foreground font-medium")}>
 								<IconUsers size={16} strokeWidth={pathname === "/users" ? 2.5 : 2} className="shrink-0" />
 								User Management
 							</Link>
 							<Link href="/account" onClick={() => setMenuOpen(false)}
 								className={"w-full flex items-center gap-[12px] px-[14px] py-[13px] text-[15px] rounded-[10px] transition-colors cursor-pointer " +
-									(pathname === "/account" ? "bg-blue/10 text-blue font-semibold" : "text-foreground-sec hover:bg-secondary/50 hover:text-foreground font-medium")}>
+									(pathname === "/account" ? "bg-blue/10 text-blue font-semibold" : "text-foreground-sec hover:bg-secondary/50 active:bg-secondary/70 hover:text-foreground font-medium")}>
 								<IconUserCog size={16} strokeWidth={pathname === "/account" ? 2.5 : 2} className="shrink-0" />
 								Account
 							</Link>
-							<button
-								onClick={() => { setMenuOpen(false); setSettingsOpen(true); }}
-								className="w-full flex items-center gap-[12px] px-[14px] py-[13px] text-[15px] rounded-[10px] transition-colors cursor-pointer text-foreground-sec hover:bg-secondary/50 hover:text-foreground font-medium"
-							>
-								<IconSettings size={16} className="shrink-0" />
-								Settings
-							</button>
 						</nav>
 					)}
 
 					{/* Mobile window sections */}
 					{isHome && (
 						<>
-							<div className="mx-[8px] border-t border-secondary" />
+							<div className="mx-[8px] border-t border-border" />
 							<div className="p-[8px]">
-								<p className="px-[10px] mb-[4px] text-[10px] font-semibold text-foreground-sec/60 uppercase tracking-wider">
+								<p className="px-[10px] mb-[4px] text-[11px] font-semibold text-foreground-sec/60">
 									Views
 								</p>
 								{/* Dashboard */}
@@ -523,7 +558,7 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 									<button
 										onClick={() => { requestViewChange("dashboard"); setMenuOpen(false); }}
 										className={"w-full flex items-center gap-[12px] px-[14px] py-[13px] text-[15px] rounded-[10px] transition-colors cursor-pointer " +
-											(focusedPanelId === "dashboard" ? "bg-blue/10 text-blue font-semibold" : "text-foreground-sec hover:bg-secondary/50 hover:text-foreground font-medium")}>
+											(focusedPanelId === "dashboard" ? "bg-blue/10 text-blue font-semibold" : "text-foreground-sec hover:bg-secondary/50 active:bg-secondary/70 hover:text-foreground font-medium")}>
 										<IconHome2 size={15} strokeWidth={focusedPanelId === "dashboard" ? 2.5 : 2} className="shrink-0" />
 										Dashboard
 									</button>
@@ -531,7 +566,7 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 								{/* Sections */}
 								{PANEL_SECTIONS.map((section) => (
 									<div key={section.id} className="mb-1 mt-2">
-										<p className="px-[10px] py-[4px] text-[10px] font-semibold text-foreground-sec uppercase tracking-wider">
+										<p className="px-[10px] py-[4px] text-[11px] font-semibold text-foreground-sec/60">
 											{section.label}
 										</p>
 										{section.items.map(({ panelId, label }) => {
@@ -542,7 +577,7 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 													<button
 														onClick={() => { requestViewChange(panelId); setMenuOpen(false); }}
 														className={"w-full flex items-center gap-[12px] px-[14px] py-[13px] text-[15px] rounded-[10px] transition-colors cursor-pointer " +
-															(active ? "bg-blue/10 text-blue font-semibold" : "text-foreground-sec hover:bg-secondary/50 hover:text-foreground font-medium")}>
+															(active ? "bg-blue/10 text-blue font-semibold" : "text-foreground-sec hover:bg-secondary/50 active:bg-secondary/70 hover:text-foreground font-medium")}>
 														<Icon size={15} strokeWidth={active ? 2.5 : 2} className="shrink-0" />
 														{label}
 													</button>
@@ -555,49 +590,78 @@ const SideNav = ({ online, devConsoleOpen, onToggleDevConsole, isAuthed }: SideN
 						</>
 					)}
 
-					<div className="mx-[8px] border-t border-secondary" />
+					<div className="mx-[8px] border-t border-border" />
 					<div className="p-[8px] flex flex-col gap-[2px]">
-						{auth && (
-							<HelpTooltip text="Open the dev console to inspect live API requests and send test requests." block>
-								<button onClick={() => { onToggleDevConsole(); setMenuOpen(false); }}
-									className={"w-full flex items-center gap-[12px] px-[14px] py-[13px] text-[15px] rounded-[10px] transition-colors cursor-pointer " +
-										(devConsoleOpen ? "bg-blue/10 text-blue font-medium" : "text-foreground-sec hover:bg-secondary/50 hover:text-foreground font-medium")}>
-									<IconCode size={16} className="shrink-0" />
-									Dev Console
-								</button>
-							</HelpTooltip>
+						<p className="px-[10px] mb-[2px] mt-[2px] text-[11px] font-semibold text-foreground-sec/60">
+							More
+						</p>
+						<button
+							onClick={() => { setExportOpen(true); setMenuOpen(false); }}
+							className="w-full flex items-center gap-[12px] px-[14px] py-[13px] text-[15px] rounded-[10px] transition-colors cursor-pointer text-foreground-sec hover:bg-secondary/50 active:bg-secondary/70 hover:text-foreground font-medium"
+						>
+							<IconDownload size={16} className="shrink-0" />
+							Export Data
+						</button>
+						{auth && onToggleDevConsole && (
+							<button
+								onClick={() => { onToggleDevConsole(); setMenuOpen(false); }}
+								className={"w-full flex items-center gap-[12px] px-[14px] py-[13px] text-[15px] rounded-[10px] transition-colors cursor-pointer font-medium " +
+									(devConsoleOpen ? "bg-blue/10 text-blue" : "text-foreground-sec hover:bg-secondary/50 hover:text-foreground")}
+							>
+								<IconTerminal2 size={16} className="shrink-0" />
+								Dev Console
+							</button>
 						)}
+					</div>
+
+					<div className="mx-[8px] border-t border-border" />
+					<div className="p-[8px] flex flex-col gap-[2px]">
 						{auth && (
 							<HelpTooltip text="Sign out of your account and return to the login screen." block>
 								<button onClick={handleLogout}
-									className="w-full flex items-center gap-[12px] px-[14px] py-[13px] text-[15px] rounded-[10px] text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer font-medium">
+									className="w-full flex items-center gap-[12px] px-[14px] py-[13px] text-[15px] rounded-[10px] text-red-400 hover:bg-red-500/10 active:bg-red-500/20 transition-colors cursor-pointer font-medium">
 									<IconLogout size={16} className="shrink-0" />
 									Log out
 								</button>
 							</HelpTooltip>
 						)}
-						<HelpTooltip text="Switch between light and dark color scheme." block>
-							<button onClick={setTheme}
-								className="w-full flex items-center gap-[12px] px-[14px] py-[13px] text-[15px] rounded-[10px] text-foreground-sec hover:bg-secondary/50 hover:text-foreground transition-colors cursor-pointer font-medium">
-								<IconMoon size={16} className="shrink-0 dark-theme:hidden" />
-								<IconSun size={16} className="shrink-0 hidden dark-theme:block" />
-								<span className="dark-theme:hidden">Dark mode</span>
-								<span className="hidden dark-theme:block">Light mode</span>
-							</button>
+						<HelpTooltip text="Switch color theme: Light, Dark, or Black." block>
+							<div className="flex flex-col gap-0.5">
+								{THEME_OPTIONS.map(({ value, label, icon: Icon }) => (
+									<button
+										key={value}
+										onClick={() => { setTheme(value); setMenuOpen(false); }}
+										className={`w-full flex items-center gap-[12px] px-[14px] py-[11px] text-[15px] rounded-[10px] transition-colors cursor-pointer font-medium ${
+											theme === value
+												? "text-foreground bg-primary/20"
+												: "text-foreground-sec hover:bg-secondary/50 active:bg-secondary/70 hover:text-foreground"
+										}`}
+									>
+										<Icon size={16} className="shrink-0" />
+										{label}
+										{theme === value && <IconCheck size={14} className="ml-auto shrink-0" />}
+									</button>
+								))}
+							</div>
 						</HelpTooltip>
 						<HelpTooltip text="Toggle help mode — shows a ? badge next to every button explaining what it does." block>
 							<button onClick={() => { toggleHelp(); setMenuOpen(false); }}
 								className={"w-full flex items-center gap-[12px] px-[14px] py-[13px] text-[15px] rounded-[10px] transition-colors cursor-pointer font-medium " +
-									(helpMode ? "text-blue bg-blue/10" : "text-foreground-sec hover:bg-secondary/50 hover:text-foreground")}>
+									(helpMode ? "text-blue bg-blue/10" : "text-foreground-sec hover:bg-secondary/50 active:bg-secondary/70 hover:text-foreground")}>
 								<IconHelpCircle size={16} className="shrink-0" />
 								Help mode
 							</button>
 						</HelpTooltip>
 					</div>
+					{/* Bottom safe area */}
+					<div className="h-6" />
 				</div>
+				</>
 			)}
 
-			{settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+			{themeDropdown}
+
+			<ExportDrawer open={exportOpen} onOpenChange={setExportOpen} panelId={focusedPanelId} />
 		</>
 	);
 };

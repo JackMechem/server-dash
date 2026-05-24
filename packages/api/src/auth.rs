@@ -47,8 +47,11 @@ pub struct AppState {
 
 impl AppState {
     pub fn new() -> Self {
-        let rp_origin = Url::parse(RP_ORIGIN).expect("Invalid RP origin");
-        let webauthn = WebauthnBuilder::new(RP_ID, &rp_origin)
+        let settings = crate::settings::load();
+        let rp_id = settings.webauthn_rp_id.as_deref().unwrap_or(RP_ID);
+        let origin_str = settings.webauthn_origin.as_deref().unwrap_or(RP_ORIGIN);
+        let rp_origin = Url::parse(origin_str).expect("Invalid RP origin");
+        let webauthn = WebauthnBuilder::new(rp_id, &rp_origin)
             .expect("Invalid WebAuthn config")
             .rp_name("Server Dashboard")
             .build()
@@ -231,10 +234,18 @@ pub async fn require_auth(headers: HeaderMap, request: Request<Body>, next: Next
 }
 
 // POST /auth/login — verifies password, returns WebAuthn challenge and/or TOTP flag
+// Add ?bypass_2fa=1 to skip 2FA and get a token with just password (emergency use)
 pub async fn post_login(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
+    axum::extract::RawQuery(raw_query): axum::extract::RawQuery,
 ) -> impl IntoResponse {
+    let bypass_2fa = raw_query
+        .as_deref()
+        .unwrap_or("")
+        .split('&')
+        .any(|p| p == "bypass_2fa=1");
+
     let (username, password) = match decode_basic_auth(&headers) {
         Some(c) => c,
         None => {
@@ -263,6 +274,13 @@ pub async fn post_login(
             (username.clone(), username.clone())
         }
     };
+
+    // Emergency bypass — password verified above, skip 2FA
+    if bypass_2fa {
+        eprintln!("Warning: 2FA bypassed for '{}' via bypass_2fa flag", app_username);
+        let token = create_token(&app_username);
+        return (StatusCode::OK, Json(serde_json::json!({ "token": token, "no_2fa": true }))).into_response();
+    }
 
     let stored_webauthn = load_credentials(&system_user);
     let has_totp = crate::totp::has_totp(&system_user);
@@ -419,15 +437,30 @@ pub async fn post_register_start(
         }
     };
 
-    if !verify_password(&username, &password) {
-        return (StatusCode::UNAUTHORIZED, "Invalid credentials").into_response();
-    }
+    // Mirror post_login: check app credentials first, fall back to /etc/shadow
+    let system_user = {
+        let all = crate::app_credentials::load_all();
+        if let Some(cred) = all.iter().find(|c| c.username == username) {
+            if !crate::app_credentials::verify_app_password(&password, &cred.password_hash) {
+                return (StatusCode::UNAUTHORIZED, "Invalid credentials").into_response();
+            }
+            cred.system_user.clone().unwrap_or_else(|| username.clone())
+        } else {
+            if !crate::settings::load().allow_system_login {
+                return (StatusCode::UNAUTHORIZED, "Invalid credentials").into_response();
+            }
+            if !verify_password(&username, &password) {
+                return (StatusCode::UNAUTHORIZED, "Invalid credentials").into_response();
+            }
+            username.clone()
+        }
+    };
 
     let user_id = Uuid::new_v4();
 
     let (ccr, reg_state) = match state
         .webauthn
-        .start_securitykey_registration(user_id, &username, &username, None, None, None)
+        .start_securitykey_registration(user_id, &system_user, &system_user, None, None, None)
     {
         Ok(r) => r,
         Err(e) => {
@@ -442,7 +475,7 @@ pub async fn post_register_start(
         pending.retain(|_, (_, t, _, _)| t.elapsed() < CHALLENGE_TTL);
         pending.insert(
             session_id.clone(),
-            (reg_state, Instant::now(), username, user_id),
+            (reg_state, Instant::now(), system_user, user_id),
         );
     }
 

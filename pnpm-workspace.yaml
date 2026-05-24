@@ -1,5 +1,6 @@
 packages:
   - 'packages/frontend'
 allowBuilds:
+  msw: true
   sharp: true
   unrs-resolver: true

@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use totp_rs::{Algorithm, Secret, TOTP};
 
 use crate::auth::{decode_basic_auth, verify_password};
+use crate::app_credentials;
 
 pub(crate) const TOTP_DIR: &str = "/var/lib/server-dash-api/totp";
 
@@ -99,9 +100,25 @@ pub async fn post_totp_setup(
     if auth_user != username {
         return (StatusCode::FORBIDDEN, "Username mismatch").into_response();
     }
-    if !verify_password(&auth_user, &password) {
-        return (StatusCode::UNAUTHORIZED, "Invalid credentials").into_response();
-    }
+
+    // Check app credentials first, fall back to /etc/shadow
+    let system_user = {
+        let all = app_credentials::load_all();
+        if let Some(cred) = all.iter().find(|c| c.username == auth_user) {
+            if !app_credentials::verify_app_password(&password, &cred.password_hash) {
+                return (StatusCode::UNAUTHORIZED, "Invalid credentials").into_response();
+            }
+            cred.system_user.clone().unwrap_or_else(|| auth_user.clone())
+        } else {
+            if !crate::settings::load().allow_system_login {
+                return (StatusCode::UNAUTHORIZED, "Invalid credentials").into_response();
+            }
+            if !verify_password(&auth_user, &password) {
+                return (StatusCode::UNAUTHORIZED, "Invalid credentials").into_response();
+            }
+            auth_user.clone()
+        }
+    };
 
     let secret = Secret::generate_secret();
     let secret_base32 = match secret.to_encoded() {
@@ -115,7 +132,7 @@ pub async fn post_totp_setup(
         StatusCode::OK,
         Json(serde_json::json!({
             "secret": secret_base32,
-            "uri": totp_uri(&secret_base32, &username),
+            "uri": totp_uri(&secret_base32, &system_user),
         })),
     )
         .into_response()
@@ -132,6 +149,8 @@ pub async fn post_totp_confirm(
     Path(username): Path<String>,
     Json(body): Json<ConfirmTotpBody>,
 ) -> impl IntoResponse {
+    let effective = app_credentials::resolve_effective_user(&username);
+
     let totp = match make_totp(&body.secret) {
         Ok(t) => t,
         Err(_) => return (StatusCode::BAD_REQUEST, "Invalid secret").into_response(),
@@ -146,8 +165,8 @@ pub async fn post_totp_confirm(
     }
 
     let stored = StoredTotp { secret: body.secret };
-    if let Err(e) = save_totp_file(&username, &stored) {
-        eprintln!("Failed to save TOTP for {}: {}", username, e);
+    if let Err(e) = save_totp_file(&effective, &stored) {
+        eprintln!("Failed to save TOTP for {}: {}", effective, e);
         return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to save TOTP").into_response();
     }
 
@@ -160,7 +179,8 @@ pub async fn post_totp_confirm(
 
 // DELETE /users/{username}/totp  (JWT-protected)
 pub async fn delete_totp(Path(username): Path<String>) -> impl IntoResponse {
-    match remove_totp_file(&username) {
+    let effective = app_credentials::resolve_effective_user(&username);
+    match remove_totp_file(&effective) {
         Ok(_) => Json(serde_json::json!({ "success": true })).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
     }

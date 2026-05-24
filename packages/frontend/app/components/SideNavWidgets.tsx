@@ -7,6 +7,7 @@ import { type Stats } from "../lib/getStats";
 import { type PowerData } from "../lib/getPower";
 import { formatBytes, statColor } from "../lib/utils";
 import { useStats, usePower } from "../lib/DataProvider";
+import { Select } from "@/components/ui/select";
 
 export type WidgetId = string;
 
@@ -109,15 +110,13 @@ function WidgetSlot({
 
 	if (editing) {
 		return (
-			<select
+			<Select
 				value={id}
-				onChange={(e) => onChange(e.target.value)}
-				className="text-[11px] bg-secondary border border-secondary rounded-xl px-2 py-2 text-foreground w-full cursor-pointer"
-			>
-				{allOptions.map((o) => (
-					<option key={o.id} value={o.id}>{o.label}</option>
-				))}
-			</select>
+				onValueChange={onChange}
+				options={allOptions.map(o => ({ value: o.id, label: o.label }))}
+				size="xs"
+				className="w-full"
+			/>
 		);
 	}
 

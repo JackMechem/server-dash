@@ -95,7 +95,7 @@ function ViewPickerPortal({
 			style={{ position: "fixed", top: pos.top, left: pos.left, zIndex: 9999 }}
 			className={isMobile ? "w-[260px] max-h-[520px] overflow-y-auto bg-primary border border-secondary rounded-xl shadow-2xl py-1.5" : "w-[220px] max-h-[420px] overflow-y-auto bg-primary border border-secondary rounded-xl shadow-2xl py-1"}
 		>
-			<p className={isMobile ? "px-4 pt-2 pb-1.5 text-xs font-semibold text-foreground-sec uppercase tracking-wider" : "px-3 pt-1.5 pb-1 text-[10px] font-semibold text-foreground-sec uppercase tracking-wider"}>
+			<p className={isMobile ? "px-4 pt-2 pb-1.5 text-xs font-semibold text-foreground-sec" : "px-3 pt-1.5 pb-1 text-[11px] font-semibold text-foreground-sec"}>
 				{title}
 			</p>
 			<button onClick={() => { onPick("dashboard"); onClose(); }} className={itemCls(dashboardActive)}>
@@ -105,7 +105,7 @@ function ViewPickerPortal({
 			{PANEL_SECTIONS.map((section) => (
 				<div key={section.id}>
 					<div className="mx-2 my-1 h-px bg-secondary" />
-					<p className={isMobile ? "px-4 pt-1.5 pb-1 text-[10px] font-semibold text-foreground-sec/60 uppercase tracking-wider" : "px-3 pt-1 pb-0.5 text-[9px] font-semibold text-foreground-sec/60 uppercase tracking-wider"}>
+					<p className={isMobile ? "px-4 pt-1.5 pb-1 text-[11px] font-semibold text-foreground-sec/60" : "px-3 pt-1 pb-0.5 text-[11px] font-semibold text-foreground-sec/60"}>
 						{section.label}
 					</p>
 					{section.items.map(({ panelId, label }) => (

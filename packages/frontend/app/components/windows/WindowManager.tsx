@@ -6,7 +6,7 @@ import {
 	splitLeaf, closeLeaf, updatePanelId, patchSizes,
 	getFirstLeafId, countLeaves, getLeafPanel,
 } from "./treeUtils";
-import { setFocusedContext, subscribeViewChange } from "@/stores/windowStore";
+import { setFocusedContext, subscribeViewChange, subscribeSplit } from "@/stores/windowStore";
 import WindowPane from "./WindowPane";
 
 // ── Persistence ───────────────────────────────────────────────────────────────
@@ -204,6 +204,18 @@ export default function WindowManager({ isAuthed }: { isAuthed: boolean }) {
 		const panelId = getLeafPanel(tree, id);
 		if (id && panelId) setFocusedContext(id, panelId);
 	}, [tree, focusedId]);
+
+	// Listen for split requests (command palette)
+	useEffect(() => {
+		const unsub = subscribeSplit(({ leafId, dir, newFirst, panelId }) => {
+			setTree((prev) => {
+				const next = splitLeaf(prev, leafId, dir, newFirst, panelId);
+				persist(next);
+				return next;
+			});
+		});
+		return unsub;
+	}, []);
 
 	// Listen for sidebar view-change requests
 	useEffect(() => {

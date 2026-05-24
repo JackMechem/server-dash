@@ -70,6 +70,14 @@ pub fn find_by_username(username: &str) -> Option<AppCredential> {
     load_all().into_iter().find(|c| c.username == username)
 }
 
+/// Resolves an app username to the effective (system) username used for
+/// WebAuthn / TOTP credential storage. Falls back to the app username itself.
+pub fn resolve_effective_user(app_username: &str) -> String {
+    find_by_username(app_username)
+        .and_then(|c| c.system_user)
+        .unwrap_or_else(|| app_username.to_string())
+}
+
 pub fn hash_password(password: &str) -> Result<String, String> {
     bcrypt::hash(password, bcrypt::DEFAULT_COST).map_err(|e| e.to_string())
 }

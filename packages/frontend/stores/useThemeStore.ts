@@ -4,16 +4,20 @@ import { useSyncExternalStore } from "react";
 
 const STORAGE_KEY = "theme";
 
-function getTheme(): "light" | "dark" {
+export type Theme = "light" | "dark" | "black";
+
+function getTheme(): Theme {
     if (typeof document === "undefined") return "light";
-    return document.documentElement.classList.contains("dark-theme") ? "dark" : "light";
+    if (document.documentElement.classList.contains("black-theme")) return "black";
+    if (document.documentElement.classList.contains("dark-theme")) return "dark";
+    return "light";
 }
 
-function getThemeSnapshot(): "light" | "dark" {
+function getThemeSnapshot(): Theme {
     return getTheme();
 }
 
-function getServerSnapshot(): "light" | "dark" {
+function getServerSnapshot(): Theme {
     return "light";
 }
 
@@ -28,16 +32,16 @@ function notifyListeners() {
     listeners.forEach((cb) => cb());
 }
 
-export function useTheme(): "light" | "dark" {
+export function useTheme(): Theme {
     return useSyncExternalStore(subscribe, getThemeSnapshot, getServerSnapshot);
 }
 
 export function useSetTheme() {
-    return function setTheme() {
-        const isDark = document.documentElement.classList.toggle("dark-theme");
-        try {
-            localStorage.setItem(STORAGE_KEY, isDark ? "dark" : "light");
-        } catch {}
+    return function setTheme(theme: Theme) {
+        document.documentElement.classList.remove("dark-theme", "black-theme");
+        if (theme === "dark") document.documentElement.classList.add("dark-theme");
+        if (theme === "black") document.documentElement.classList.add("black-theme");
+        try { localStorage.setItem(STORAGE_KEY, theme); } catch {}
         notifyListeners();
     };
 }

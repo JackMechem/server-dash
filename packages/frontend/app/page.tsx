@@ -4,6 +4,8 @@ import { useEffect, useState, useRef } from "react";
 import SideNav from "./components/SideNav";
 import WindowManager from "./components/windows/WindowManager";
 import DevConsole, { type LogEntry } from "./components/DevConsole";
+import { CommandPalette } from "./components/CommandPalette";
+import { AppMenubar } from "./components/AppMenubar";
 
 export default function Home() {
 	const [isAuthed, setIsAuthed] = useState<boolean | null>(null);
@@ -88,24 +90,36 @@ export default function Home() {
 	}, []);
 
 	return (
-		<div className="w-full h-full bg-primary text-foreground overflow-hidden flex flex-row">
-			<SideNav
-				online={online}
-				devConsoleOpen={panelOpen}
-				onToggleDevConsole={() => setPanelOpen((o) => !o)}
-			/>
+		<div className="w-full h-full bg-primary text-foreground overflow-hidden flex flex-col">
+			{mounted && (
+				<AppMenubar
+					isAuthed={!!isAuthed}
+					devConsoleOpen={panelOpen}
+					onToggleDevConsole={() => setPanelOpen((o) => !o)}
+				/>
+			)}
 
-			<div
-				className="flex-1 overflow-hidden pt-[52px] lg:pt-0 lg:m-[10px_10px_10px_0px] lg:rounded-2xl min-w-0"
-				style={{
-					paddingRight: panelOpen && !isMobile ? panelWidth : 0,
-					transition: "padding-right 280ms cubic-bezier(0.4,0,0.2,1)",
-				}}
-			>
-				{mounted && (
-					<WindowManager isAuthed={!!isAuthed} />
-				)}
+			<div className="flex flex-1 min-h-0 flex-row overflow-hidden">
+				<SideNav
+					online={online}
+					devConsoleOpen={panelOpen}
+					onToggleDevConsole={() => setPanelOpen((o) => !o)}
+				/>
+
+				<div
+					className="flex-1 overflow-hidden pt-[52px] lg:pt-0 lg:m-[10px_10px_10px_0px] lg:rounded-2xl min-w-0"
+					style={{
+						paddingRight: panelOpen && !isMobile ? panelWidth : 0,
+						transition: "padding-right 280ms cubic-bezier(0.4,0,0.2,1)",
+					}}
+				>
+					{mounted && (
+						<WindowManager isAuthed={!!isAuthed} />
+					)}
+				</div>
 			</div>
+
+			{mounted && <CommandPalette />}
 
 			{mounted && isAuthed && (
 				<DevConsole
@@ -115,6 +129,7 @@ export default function Home() {
 					onClose={() => setPanelOpen(false)}
 					onWidthChange={setPanelWidth}
 					logs={logs}
+					onClearLogs={() => setLogs([])}
 				/>
 			)}
 		</div>

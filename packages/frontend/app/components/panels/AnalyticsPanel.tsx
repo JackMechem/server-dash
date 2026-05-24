@@ -6,10 +6,11 @@ import { createPortal } from "react-dom";
 import {
 	IconRefresh, IconChartBar,
 	IconChartLine, IconChartCandle, IconLayoutSidebarRight, IconX, IconCalendar,
-	IconChevronDown, IconCheck,
+
 } from "@tabler/icons-react";
 import RangePicker, { type RangeUnit, RANGE_UNIT_HOURS, initRangeFromHours } from "@/app/components/RangePicker";
 import IntervalPicker, { INTERVAL_UNITS } from "@/app/components/IntervalPicker";
+import { Select } from "@/components/ui/select";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -362,72 +363,7 @@ function PanelOpt({ label, selected, color, onClick, mobile }: {
 	);
 }
 
-// ── Live unit dropdown (used only for Update Interval slider) ─────────────────
-
-function LiveUnitDropdown({ value, units, mobile, onChange }: {
-	value: string;
-	units: { value: string; label: string; max: number }[];
-	mobile?: boolean;
-	onChange: (v: string) => void;
-}) {
-	const [open, setOpen] = useState(false);
-	const triggerRef = useRef<HTMLButtonElement>(null);
-	const menuRef    = useRef<HTMLDivElement>(null);
-	const [pos, setPos] = useState({ top: 0, left: 0, w: 0 });
-	const fs  = mobile ? 15 : 13;
-	const pad = mobile ? "10px 10px" : "7px 10px";
-
-	useEffect(() => {
-		if (!open || !triggerRef.current) return;
-		const r = triggerRef.current.getBoundingClientRect();
-		const menuH = units.length * (mobile ? 44 : 36) + 8;
-		const below = r.bottom + 4 + menuH < window.innerHeight - 8;
-		setPos({ top: below ? r.bottom + 4 : r.top - menuH - 4, left: r.left, w: r.width });
-		const h = (e: MouseEvent) => {
-			if (!triggerRef.current?.contains(e.target as Node) && !menuRef.current?.contains(e.target as Node)) setOpen(false);
-		};
-		document.addEventListener("mousedown", h);
-		return () => document.removeEventListener("mousedown", h);
-	}, [open, units.length, mobile]);
-
-	const label = units.find(u => u.value === value)?.label ?? value;
-
-	return (<>
-		<button ref={triggerRef} onClick={() => setOpen(o => !o)} style={{
-			display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4,
-			padding: pad, borderRadius: 8,
-			border: `1px solid ${open ? "var(--color-blue)" : "var(--color-secondary)"}`,
-			background: open ? "color-mix(in srgb, var(--color-blue) 8%, var(--color-secondary) 28%)" : "color-mix(in srgb, var(--color-secondary) 35%, transparent)",
-			color: "var(--color-foreground)", fontSize: fs, fontWeight: 500, cursor: "pointer",
-		}}>
-			<span>{label}</span>
-			<IconChevronDown size={mobile ? 13 : 11} style={{ color: "var(--color-foreground-sec)", flexShrink: 0, transition: "transform 150ms", transform: open ? "rotate(180deg)" : "rotate(0deg)" }} />
-		</button>
-		{open && typeof document !== "undefined" && createPortal(
-			<div ref={menuRef} style={{ position: "fixed", top: pos.top, left: pos.left, minWidth: Math.max(pos.w, 90), background: "var(--color-primary)", border: "1px solid var(--color-secondary)", borderRadius: 10, boxShadow: "0 8px 28px rgba(0,0,0,0.2)", zIndex: 9999, padding: 4 }}>
-				{units.map(u => {
-					const active = u.value === value;
-					return (
-						<button key={u.value} onClick={() => { onChange(u.value); setOpen(false); }} style={{
-							width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
-							padding: mobile ? "10px 12px" : "7px 10px", borderRadius: 7, border: "none",
-							background: active ? "color-mix(in srgb, var(--color-blue) 12%, transparent)" : "transparent",
-							color: active ? "var(--color-blue)" : "var(--color-foreground)",
-							fontSize: mobile ? 14 : 13, fontWeight: active ? 600 : 400, cursor: "pointer",
-						}}
-						onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = "color-mix(in srgb, var(--color-secondary) 55%, transparent)"; }}
-						onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = active ? "color-mix(in srgb, var(--color-blue) 12%, transparent)" : "transparent"; }}
-						>
-							<span>{u.label}</span>
-							{active && <IconCheck size={12} style={{ color: "var(--color-blue)", flexShrink: 0 }} />}
-						</button>
-					);
-				})}
-			</div>,
-			document.body
-		)}
-	</>);
-}
+// LiveUnitDropdown replaced by Select component from @/components/ui/select
 
 // ── Tooltip ───────────────────────────────────────────────────────────────────
 
@@ -1609,11 +1545,11 @@ export default function AnalyticsPanel({ mode = "past", readOnly = false, defaul
 									onChange={e => setLiveIntervalValue(parseInt(e.target.value))}
 									style={{ flex: 1, accentColor: "var(--color-blue)", cursor: "pointer" }}
 								/>
-								<LiveUnitDropdown
+								<Select
 									value={liveIntervalUnit}
-									units={LIVE_UNITS}
-									mobile={isMobile}
-									onChange={u => { setLiveIntervalUnit(u); setLiveIntervalValue(1); }}
+									onValueChange={u => { setLiveIntervalUnit(u); setLiveIntervalValue(1); }}
+									options={LIVE_UNITS.map(u => ({ value: u.value, label: u.label }))}
+									size={isMobile ? "default" : "sm"}
 								/>
 							</div>
 							<div style={{ textAlign: "center", fontSize: isMobile ? 12 : 10, color: "var(--color-foreground-sec)" }}>
@@ -1703,7 +1639,7 @@ export default function AnalyticsPanel({ mode = "past", readOnly = false, defaul
 				</button>
 				{/* Interval picker — only when not in device mode */}
 				{!barDeviceAxis && (<>
-					<p style={{ fontSize: isMobile ? 11 : 10, fontWeight: 600, color: "var(--color-foreground-sec)", margin: isMobile ? "10px 12px 6px" : "8px 12px 5px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Interval</p>
+					<p style={{ fontSize: 11, fontWeight: 600, color: "var(--color-foreground-sec)", margin: isMobile ? "10px 12px 6px" : "8px 12px 5px" }}>Interval</p>
 					{/* Auto toggle */}
 					<button
 						onClick={() => setBarXAxisAuto(v => !v)}

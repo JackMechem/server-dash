@@ -57,7 +57,7 @@ function StatCard({ label, value, sub, hot }: { label: string; value: string; su
 			gap: 4,
 			background: "var(--color-primary)",
 		}}>
-			<p style={{ fontSize: "9pt", color: "var(--color-foreground-sec)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.07em", margin: 0 }}>
+			<p style={{ fontSize: "11px", color: "var(--color-foreground-sec)", fontWeight: 600, margin: 0 }}>
 				{label}
 			</p>
 			<p style={{ fontSize: "24pt", fontWeight: 700, color: hot ? "var(--color-blue)" : "var(--color-foreground)", lineHeight: 1, margin: 0 }}>
@@ -78,7 +78,7 @@ function PowerSummaryCard({ label, value, sub, accent }: { label: string; value:
 			flexDirection: "column",
 			gap: 3,
 		}}>
-			<p style={{ fontSize: "9pt", color: "var(--color-foreground-sec)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.07em", margin: 0 }}>
+			<p style={{ fontSize: "11px", color: "var(--color-foreground-sec)", fontWeight: 600, margin: 0 }}>
 				{label}
 			</p>
 			<p style={{ fontSize: "20pt", fontWeight: 700, color: accent ?? "var(--color-foreground)", lineHeight: 1.1, margin: 0 }}>
@@ -316,8 +316,8 @@ export default function DashboardPanel({ isAuthed }: { isAuthed: boolean }) {
 					<table style={{ width: "100%", borderCollapse: "collapse" }}>
 						<thead>
 							<tr style={{ background: "color-mix(in srgb, var(--color-secondary) 30%, transparent)" }}>
-								<th style={{ padding: "8px 20px", textAlign: "left", fontSize: "9pt", fontWeight: 600, color: "var(--color-foreground-sec)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Service</th>
-								<th style={{ padding: "8px 20px", textAlign: "right", fontSize: "9pt", fontWeight: 600, color: "var(--color-foreground-sec)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Status</th>
+								<th style={{ padding: "8px 20px", textAlign: "left", fontSize: "11px", fontWeight: 600, color: "var(--color-foreground-sec)" }}>Service</th>
+								<th style={{ padding: "8px 20px", textAlign: "right", fontSize: "11px", fontWeight: 600, color: "var(--color-foreground-sec)" }}>Status</th>
 							</tr>
 						</thead>
 						<tbody>

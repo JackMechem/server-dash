@@ -2,6 +2,10 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import HelpTooltip from "../components/HelpTooltip";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 function b64uToBuf(b64u: string): ArrayBuffer {
 	const b64 = b64u.replace(/-/g, "+").replace(/_/g, "/");
@@ -24,7 +28,14 @@ type Status =
 	| "waiting_yubikey"
 	| "verifying"
 	| "waiting_totp"
-	| "verifying_totp";
+	| "verifying_totp"
+	| "bypass_checking";
+
+interface PendingChallenge {
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	challenge: any;
+	session_id: string;
+}
 
 export default function AuthPage() {
 	const router = useRouter();
@@ -33,9 +44,9 @@ export default function AuthPage() {
 	const [error, setError] = useState("");
 	const [status, setStatus] = useState<Status>("idle");
 	const [initialChecking, setInitialChecking] = useState(true);
-	const [sessionId, setSessionId] = useState("");
 	const [hasTotpFallback, setHasTotpFallback] = useState(false);
 	const [totpCode, setTotpCode] = useState("");
+	const [pendingChallenge, setPendingChallenge] = useState<PendingChallenge | null>(null);
 	const webauthnAbort = useRef<AbortController | null>(null);
 
 	useEffect(() => {
@@ -53,6 +64,12 @@ export default function AuthPage() {
 		}
 		checkAuth();
 	}, [router]);
+
+	const redirect = () => {
+		const callbackUrl =
+			new URLSearchParams(window.location.search).get("callbackUrl") ?? "/";
+		router.push(callbackUrl);
+	};
 
 	async function handleLogin(e: React.FormEvent) {
 		e.preventDefault();
@@ -74,24 +91,35 @@ export default function AuthPage() {
 
 			const data = await loginRes.json();
 
-			// No 2FA registered — token already set as cookie by the API route
 			if (data.no_2fa) {
-				const callbackUrl =
-					new URLSearchParams(window.location.search).get("callbackUrl") ?? "/";
-				router.push(callbackUrl);
+				redirect();
 				return;
 			}
 
 			const { session_id, challenge, has_totp } = data;
-			setSessionId(session_id);
 			setHasTotpFallback(!!has_totp);
 
 			if (!challenge) {
+				setPendingChallenge({ challenge: null, session_id });
 				setStatus("waiting_totp");
 				return;
 			}
 
+			// Store challenge and show waiting screen — user can pick a method before we fire WebAuthn
+			setPendingChallenge({ challenge, session_id });
 			setStatus("waiting_yubikey");
+		} catch {
+			setError("Something went wrong. Try again.");
+			setStatus("idle");
+		}
+	}
+
+	async function fireWebAuthn() {
+		if (!pendingChallenge) return;
+		const { challenge, session_id } = pendingChallenge;
+		setError("");
+
+		try {
 			const opts = challenge.publicKey;
 			opts.challenge = b64uToBuf(opts.challenge);
 			opts.userVerification = "discouraged";
@@ -118,7 +146,7 @@ export default function AuthPage() {
 					"Security key error: " +
 						(err instanceof Error ? err.message : "cancelled"),
 				);
-				setStatus("idle");
+				setStatus("waiting_yubikey");
 				return;
 			}
 
@@ -149,16 +177,14 @@ export default function AuthPage() {
 
 			if (!verifyRes.ok) {
 				setError("Security key verification failed.");
-				setStatus("idle");
+				setStatus("waiting_yubikey");
 				return;
 			}
 
-			const callbackUrl =
-				new URLSearchParams(window.location.search).get("callbackUrl") ?? "/";
-			router.push(callbackUrl);
+			redirect();
 		} catch {
 			setError("Something went wrong. Try again.");
-			setStatus("idle");
+			setStatus("waiting_yubikey");
 		}
 	}
 
@@ -167,6 +193,27 @@ export default function AuthPage() {
 		setError("");
 		setTotpCode("");
 		setStatus("waiting_totp");
+	}
+
+	async function handleBypassLogin() {
+		setError("");
+		setStatus("bypass_checking");
+		try {
+			const res = await fetch("/api/auth/login", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ username, password, bypass_2fa: true }),
+			});
+			if (!res.ok) {
+				setError("Invalid credentials.");
+				setStatus("idle");
+				return;
+			}
+			redirect();
+		} catch {
+			setError("Something went wrong.");
+			setStatus("idle");
+		}
 	}
 
 	async function handleTotpVerify(e: React.FormEvent) {
@@ -178,7 +225,10 @@ export default function AuthPage() {
 			const res = await fetch("/api/auth/verify-totp", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ session_id: sessionId, code: totpCode }),
+				body: JSON.stringify({
+					session_id: pendingChallenge?.session_id ?? "",
+					code: totpCode,
+				}),
 			});
 
 			if (!res.ok) {
@@ -187,9 +237,7 @@ export default function AuthPage() {
 				return;
 			}
 
-			const callbackUrl =
-				new URLSearchParams(window.location.search).get("callbackUrl") ?? "/";
-			router.push(callbackUrl);
+			redirect();
 		} catch {
 			setError("Something went wrong. Try again.");
 			setStatus("waiting_totp");
@@ -201,111 +249,113 @@ export default function AuthPage() {
 	const busy = status !== "idle";
 	const inTotpMode = status === "waiting_totp" || status === "verifying_totp";
 	const totpBusy = status === "verifying_totp";
+	const inYubikeyMode = status === "waiting_yubikey" || status === "verifying";
 
 	return (
-		<main className="h-full bg-primary flex items-center justify-center">
-			<div className="bg-primary border border-secondary rounded-2xl md:p-12 p-8 w-full m-[10px] md:max-w-md">
+		<main className="h-full bg-background flex items-center justify-center">
+			<div className="bg-background border border-border rounded-2xl md:p-12 p-8 w-full m-[10px] md:max-w-md">
 				<div className="mb-8">
-					<p className="text-[11px] tracking-widest text-blue uppercase mb-2">
-						dell-xps-nixos-serv
-					</p>
 					<h1
 						className="text-[28px] font-normal text-foreground tracking-tight mb-1.5"
 						style={{ lineHeight: "normal" }}
 					>
 						Login
 					</h1>
-					<p
-						className="text-sm text-foreground-sec"
-						style={{ fontSize: "14px", lineHeight: "normal" }}
-					>
-						Enter system credentials
+					<p className="text-sm text-muted-foreground" style={{ lineHeight: "normal" }}>
+						Enter your credentials
 					</p>
 				</div>
 
-				{!inTotpMode ? (
+				{inYubikeyMode ? (
+					<div className="flex flex-col gap-4">
+						<p className="text-sm text-muted-foreground text-center">
+							Your password was accepted. Verify with your security key to continue.
+						</p>
+
+						{error && (
+							<Alert variant="destructive">
+								<AlertDescription>{error}</AlertDescription>
+							</Alert>
+						)}
+
+						<Button
+							onClick={fireWebAuthn}
+							disabled={status === "verifying"}
+							className="w-full py-2.5 h-auto"
+						>
+							{status === "verifying" ? "Verifying…" : "Touch Security Key"}
+						</Button>
+
+						<div className="flex flex-col items-center gap-1">
+							{hasTotpFallback && (
+								<Button type="button" variant="link" size="sm" onClick={switchToTotp}>
+									Use authenticator app instead
+								</Button>
+							)}
+							<Button
+								type="button"
+								variant="link"
+								size="sm"
+								className="text-muted-foreground text-xs"
+								onClick={handleBypassLogin}
+								disabled={status === "bypass_checking"}
+							>
+								{status === "bypass_checking" ? "Signing in…" : "Skip 2FA (password only)"}
+							</Button>
+						</div>
+					</div>
+				) : !inTotpMode ? (
 					<form onSubmit={handleLogin}>
 						<div className="mb-4">
-							<label className="block text-[11px] tracking-wider text-foreground-sec uppercase mb-1.5">
-								Username
-							</label>
-							<input
+							<Label className="block mb-1.5">Username</Label>
+							<Input
 								type="text"
 								value={username}
 								onChange={(e) => setUsername(e.target.value)}
 								required
 								disabled={busy}
 								autoComplete="username"
-								className="w-full px-3.5 py-2.5 border border-secondary rounded-xl text-sm text-foreground bg-secondary/50 outline-none focus:border-blue/50 transition-colors"
+								className="py-2.5"
 							/>
 						</div>
 
 						<div className="mb-6">
-							<label className="block text-[11px] tracking-wider text-foreground-sec uppercase mb-1.5">
-								Password
-							</label>
-							<input
+							<Label className="block mb-1.5">Password</Label>
+							<Input
 								type="password"
 								value={password}
 								onChange={(e) => setPassword(e.target.value)}
 								required
 								disabled={busy}
 								autoComplete="current-password"
-								className="w-full px-3.5 py-2.5 border border-secondary rounded-xl text-sm text-foreground bg-secondary/50 outline-none focus:border-blue/50 transition-colors"
+								className="py-2.5"
 							/>
 						</div>
 
-						{status === "waiting_yubikey" && (
-							<div className="mb-4 flex flex-col items-center gap-2">
-								<p
-									className="text-sm text-blue text-center animate-pulse"
-									style={{ fontSize: "14px" }}
-								>
-									Touch your security key…
-								</p>
-								{hasTotpFallback && (
-									<button
-										type="button"
-										onClick={switchToTotp}
-										className="text-[12px] text-foreground-sec hover:text-foreground underline underline-offset-2 transition-colors cursor-pointer"
-									>
-										Use authenticator app instead
-									</button>
-								)}
-							</div>
-						)}
-
 						{error && (
-							<p className="text-[13px] text-red-400 mb-4">{error}</p>
+							<Alert variant="destructive" className="mb-4">
+								<AlertDescription>{error}</AlertDescription>
+							</Alert>
 						)}
 
 						<HelpTooltip
-							text="Submit your username and password, then touch your security key when prompted to complete sign-in."
+							text="Submit your username and password, then touch your security key when prompted."
 							block
 						>
-							<button
+							<Button
 								type="submit"
 								disabled={busy}
-								className={`w-full py-2.5 rounded-xl text-md border border-blue/30 text-white font-[600] tracking-wide transition-colors ${
-									busy
-										? "bg-blue/40 cursor-not-allowed"
-										: "bg-blue hover:bg-blue/80 cursor-pointer"
-								}`}
+								className="w-full py-2.5 h-auto"
 							>
-								{status === "idle" && "Sign in"}
-								{status === "checking" && "Checking…"}
-								{status === "waiting_yubikey" && "Waiting for key…"}
-								{status === "verifying" && "Verifying…"}
-							</button>
+								{status === "checking" ? "Checking…" : "Sign in"}
+							</Button>
 						</HelpTooltip>
 					</form>
 				) : (
 					<form onSubmit={handleTotpVerify}>
 						<div className="mb-6">
-							<label className="block text-[11px] tracking-wider text-foreground-sec uppercase mb-1.5">
-								Authenticator Code
-							</label>
-							<input
+							<Label className="block mb-1.5">Authenticator Code</Label>
+							<Input
 								type="text"
 								inputMode="numeric"
 								pattern="[0-9]{6}"
@@ -316,40 +366,39 @@ export default function AuthPage() {
 								disabled={totpBusy}
 								autoComplete="one-time-code"
 								placeholder="000000"
-								className="w-full px-3.5 py-2.5 border border-secondary rounded-xl text-sm text-foreground bg-secondary/50 outline-none focus:border-blue/50 transition-colors tracking-widest text-center text-lg font-mono"
+								className="py-2.5 tracking-widest text-center text-lg font-mono"
 							/>
-							<p className="text-[11px] text-foreground-sec mt-1.5">
+							<p className="text-[11px] text-muted-foreground mt-1.5">
 								Enter the 6-digit code from your authenticator app.
 							</p>
 						</div>
 
 						{error && (
-							<p className="text-[13px] text-red-400 mb-4">{error}</p>
+							<Alert variant="destructive" className="mb-4">
+								<AlertDescription>{error}</AlertDescription>
+							</Alert>
 						)}
 
-						<button
+						<Button
 							type="submit"
 							disabled={totpBusy || totpCode.length !== 6}
-							className={`w-full py-2.5 rounded-xl text-md border border-blue/30 text-white font-[600] tracking-wide transition-colors mb-3 ${
-								totpBusy || totpCode.length !== 6
-									? "bg-blue/40 cursor-not-allowed"
-									: "bg-blue hover:bg-blue/80 cursor-pointer"
-							}`}
+							className="w-full py-2.5 h-auto mb-3"
 						>
 							{totpBusy ? "Verifying…" : "Verify Code"}
-						</button>
+						</Button>
 
-						<button
+						<Button
 							type="button"
+							variant="link"
+							className="w-full"
 							onClick={() => {
 								setStatus("idle");
 								setError("");
 								setTotpCode("");
 							}}
-							className="w-full text-[12px] text-foreground-sec hover:text-foreground underline underline-offset-2 transition-colors cursor-pointer"
 						>
 							Back to login
-						</button>
+						</Button>
 					</form>
 				)}
 			</div>
