@@ -5,25 +5,25 @@ windows:
 - front@nvim:
     layout: 5ce4,230x53,0,0,15
     panes:
-    - cd /home/jack/Projects/server-dash-mono-repo/packages/frontend && a
+    - cd /home/jack/Projects/server-dash-mono-repo/packages/frontend/
 - back@nvim:
     layout: 5ce5,230x53,0,0,16
     panes:
-    - cd /home/jack/Projects/server-dash-mono-repo/packages/api && a
+    - cd /home/jack/Projects/server-dash-mono-repo/packages/api/
 - all@services:
     layout: b917,230x53,0,0{115x53,0,0,17,114x53,116,0,18}
     panes:
-    - cd /home/jack/Projects/server-dash-mono-repo/packages/api && nix develop .#api && a
-    - cd /home/jack/Projects/server-dash-mono-repo/packages/frontend && nix develop .#frontend && a
+    - cd /home/jack/Projects/server-dash-mono-repo/ && nix develop .#api && cd /home/jack/Projects/server-dash-mono-repo/packages/api/
+    - cd /home/jack/Projects/server-dash-mono-repo/ && nix develop .#frontend && cd /home/jack/Projects/server-dash-mono-repo/packages/frontend/
 - front@term:
     layout: 5ce8,230x53,0,0,19
     panes:
-    - cd /home/jack/Projects/server-dash-mono-repo/packages/frontend && nix develop .#frontend && a
+    - cd /home/jack/Projects/server-dash-mono-repo/ && nix develop .#frontend && cd /home/jack/Projects/server-dash-mono-repo/packages/frontend/
 - back@term:
     layout: dce0,230x53,0,0,21
     panes:
-    - cd /home/jack/Projects/server-dash-mono-repo/packages/api && nix develop .#api && a
+    - cd /home/jack/Projects/server-dash-mono-repo/ && nix develop .#api && cd /home/jack/Projects/server-dash-mono-repo/packages/api
 - all@term:
     layout: dce1,230x53,0,0,22
     panes:
-    - cd /home/jack/Projects/server-dash-mono-repo
+    - cd /home/jack/Projects/server-dash-mono-repo/ && nix develop -c zsh
