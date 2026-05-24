@@ -249,7 +249,7 @@ export default function AuthPage() {
 	const busy = status !== "idle";
 	const inTotpMode = status === "waiting_totp" || status === "verifying_totp";
 	const totpBusy = status === "verifying_totp";
-	const inYubikeyMode = status === "waiting_yubikey" || status === "verifying";
+	const inYubikeyMode = status === "waiting_yubikey" || status === "verifying" || status === "bypass_checking";
 
 	return (
 		<main className="h-full bg-background flex items-center justify-center">
