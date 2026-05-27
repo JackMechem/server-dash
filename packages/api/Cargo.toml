@@ -33,3 +33,4 @@ totp-rs = { version = "5", features = ["gen_secret"] }
 url = "2"
 uuid = { version = "1", features = ["v4", "serde"] }
 bcrypt = "0.15"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }

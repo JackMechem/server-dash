@@ -7,7 +7,7 @@ import {
 	IconHome2, IconMoon, IconSun, IconMoonStars, IconChevronsLeft, IconChevronsRight,
 	IconMenu2, IconX, IconKey, IconLogout, IconUsers, IconTerminal2, IconDownload,
 	IconChevronDown, IconChevronRight, IconBolt, IconHistory, IconHelpCircle,
-	IconCoin, IconPlug, IconBattery4, IconUserCog, IconArrowLeft, IconCheck,
+	IconCoin, IconPlug, IconBattery4, IconUserCog, IconArrowLeft, IconCheck, IconToggleRight,
 } from "@tabler/icons-react";
 import { useTheme, useSetTheme, type Theme } from "@/stores/useThemeStore";
 import { createPortal } from "react-dom";
@@ -22,6 +22,7 @@ const COLLAPSED_W = 52;
 
 const SECTION_ICONS: Record<string, React.ElementType> = {
 	"power-analytics": IconBolt,
+	"smart-buttons":   IconToggleRight,
 };
 
 const ANALYTICS_ICONS: Record<PanelId, React.ElementType> = {
@@ -31,6 +32,7 @@ const ANALYTICS_ICONS: Record<PanelId, React.ElementType> = {
 	"summary-cost":     IconCoin,
 	"summary-power":    IconPlug,
 	"summary-energy":   IconBattery4,
+	"smart-buttons":    IconToggleRight,
 };
 
 interface SideNavProps {

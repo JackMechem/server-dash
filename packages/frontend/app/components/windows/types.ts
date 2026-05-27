@@ -4,7 +4,8 @@ export type PanelId =
 	| "analytics-live"
 	| "summary-cost"
 	| "summary-power"
-	| "summary-energy";
+	| "summary-energy"
+	| "smart-buttons";
 
 export const PANEL_LABELS: Record<PanelId, string> = {
 	dashboard:           "Dashboard",
@@ -13,6 +14,7 @@ export const PANEL_LABELS: Record<PanelId, string> = {
 	"summary-cost":      "Electricity Cost",
 	"summary-power":     "Power Draw",
 	"summary-energy":    "Energy Usage",
+	"smart-buttons":     "Smart Buttons",
 };
 
 // ── Sidebar sections ──────────────────────────────────────────────────────────
@@ -30,6 +32,13 @@ export const PANEL_SECTIONS: PanelSection[] = [
 			{ panelId: "summary-cost",   label: "Cost" },
 			{ panelId: "summary-power",  label: "Power" },
 			{ panelId: "summary-energy", label: "Energy" },
+		],
+	},
+	{
+		id: "smart-buttons",
+		label: "Smart Buttons",
+		items: [
+			{ panelId: "smart-buttons", label: "Devices" },
 		],
 	},
 ];

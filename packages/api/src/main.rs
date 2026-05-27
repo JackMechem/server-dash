@@ -57,6 +57,9 @@ async fn main() {
 
     let state = Arc::new(auth::AppState::new());
 
+    let smart_button_store: routes::smart_buttons::SmartButtonStore =
+        Arc::new(Mutex::new(routes::smart_buttons::load_store()));
+
     let power_history: routes::power::PowerHistory =
         Arc::new(Mutex::new(routes::power::load_history()));
 
@@ -134,6 +137,9 @@ async fn main() {
         )
         .route("/system/reboot", post(routes::system::system_reboot))
         .route("/system/shutdown", post(routes::system::system_shutdown))
+        .route("/smart-buttons", get(routes::smart_buttons::get_buttons))
+        .route("/smart-buttons/{id}/set", post(routes::smart_buttons::post_set))
+        .route("/smart-buttons/{id}", delete(routes::smart_buttons::delete_button))
         .route_layer(middleware::from_fn(auth::require_auth));
 
     let app = Router::new()
@@ -142,6 +148,7 @@ async fn main() {
         .route("/power", get(routes::power::get_power))
         .route("/power/stream", get(routes::power::get_power_stream))
         .route("/power/history", get(routes::power::get_power_history))
+        .route("/smart-buttons/callback", post(routes::smart_buttons::post_callback))
         .route("/auth/login", post(auth::post_login))
         .route("/auth/verify", post(auth::post_verify))
         .route("/auth/verify-totp", post(auth::post_verify_totp))
@@ -161,9 +168,10 @@ async fn main() {
         .layer(Extension(power_history))
         .layer(Extension(live_cache))
         .layer(Extension(active_timer))
-        .layer(Extension(power_broadcast));
+        .layer(Extension(power_broadcast))
+        .layer(Extension(smart_button_store));
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3001")
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3001")
         .await
         .unwrap();
     axum::serve(listener, app).await.unwrap();
