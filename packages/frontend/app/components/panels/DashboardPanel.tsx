@@ -1,10 +1,20 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { type Stats } from "../../lib/getStats";
 import AnalyticsPanel from "./AnalyticsPanel";
 import HelpTooltip from "../HelpTooltip";
 import { useStats } from "../../lib/DataProvider";
+import type { TapoDevice } from "../../lib/getPower";
+import { useSmartButtons } from "../../lib/useSmartButtons";
+
+function Toggle({ on, pending, onToggle }: { on: boolean; pending: boolean; onToggle: () => void }) {
+	return (
+		<button onClick={onToggle} disabled={pending} role="switch" aria-checked={on} style={{ position: "relative", width: 36, height: 20, borderRadius: 10, border: "none", background: on ? "var(--color-blue)" : "color-mix(in srgb, var(--color-secondary) 120%, transparent)", cursor: pending ? "default" : "pointer", opacity: pending ? 0.5 : 1, transition: "background 150ms", flexShrink: 0, padding: 0 }}>
+			<span style={{ position: "absolute", top: 2, left: on ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left 150ms", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }} />
+		</button>
+	);
+}
 
 // ── Types / constants ─────────────────────────────────────────────────────────
 
@@ -120,6 +130,35 @@ export default function DashboardPanel({ isAuthed }: { isAuthed: boolean }) {
 	const [hours, setHours] = useState(24);
 	const [readings, setReadings] = useState<HistoryEntry[]>([]);
 	const [powerLoading, setPowerLoading] = useState(true);
+
+	const [tapo, setTapo] = useState<TapoDevice[]>([]);
+	const { devices: iot } = useSmartButtons();
+	const [tapoPending, setTapoPending] = useState<string | null>(null);
+	const [iotPending, setIotPending] = useState<string | null>(null);
+
+	const loadDevices = useCallback(async () => {
+		const r = await fetch("/api/power").then(res => res.json()).catch(() => null);
+		if (r) setTapo(r.devices ?? []);
+	}, []);
+
+	useEffect(() => {
+		loadDevices();
+		const id = setInterval(loadDevices, 5000);
+		return () => clearInterval(id);
+	}, [loadDevices]);
+
+	const handleTapoToggle = async (name: string, on: boolean) => {
+		setTapoPending(name);
+		await fetch(`/api/power/${encodeURIComponent(name)}/${on ? "on" : "off"}`, { method: "POST" });
+		await loadDevices();
+		setTapoPending(null);
+	};
+
+	const handleIotToggle = async (deviceId: string, button: number, enabled: boolean) => {
+		setIotPending(`${deviceId}:${button}`);
+		await fetch(`/api/smart-buttons/${deviceId}/set`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ button, enabled }) });
+		setIotPending(null);
+	};
 
 	// Power history fetch
 	useEffect(() => {
@@ -303,6 +342,44 @@ export default function DashboardPanel({ isAuthed }: { isAuthed: boolean }) {
 								</div>
 							</div>
 						</div>
+					)}
+				</div>
+			)}
+
+			{/* Devices */}
+			{(tapo.length > 0 || iot.length > 0) && (
+				<div style={{ border: "1px solid var(--color-secondary)", borderRadius: 12, overflow: "hidden" }}>
+					<div style={{ padding: "12px 20px", borderBottom: "1px solid var(--color-secondary)", display: "flex", alignItems: "baseline", gap: 8 }}>
+						<SectionTitle>Devices</SectionTitle>
+						<span style={{ fontSize: "9pt", color: "var(--color-foreground-sec)" }}>
+							{tapo.filter(d => d.on).length + iot.reduce((n, d) => n + d.buttons.filter(b => b.enabled).length, 0)} on
+						</span>
+					</div>
+					{tapo.map((d, i) => {
+						const isLast = i === tapo.length - 1 && iot.length === 0;
+						return (
+							<div key={d.name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 20px", borderBottom: isLast ? "none" : "1px solid color-mix(in srgb, var(--color-secondary) 50%, transparent)", gap: 12 }}>
+								<div style={{ minWidth: 0, flex: 1 }}>
+									<p style={{ fontSize: "10pt", fontWeight: 600, color: "var(--color-foreground)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.alias || d.name}</p>
+									<p style={{ fontSize: "8pt", color: "var(--color-foreground-sec)", margin: 0 }}>{d.model} · {d.current_power_w.toFixed(1)} W</p>
+								</div>
+								<Toggle on={d.on} pending={tapoPending === d.name} onToggle={() => handleTapoToggle(d.name, !d.on)} />
+							</div>
+						);
+					})}
+					{iot.map((dev) =>
+						[...dev.buttons].sort((a, b) => a.button - b.button).map((btn, bi) => {
+							const isLast = dev === iot[iot.length - 1] && bi === dev.buttons.length - 1;
+							return (
+								<div key={`${dev.device_id}:${btn.button}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 20px", borderBottom: isLast ? "none" : "1px solid color-mix(in srgb, var(--color-secondary) 50%, transparent)", gap: 12 }}>
+									<div style={{ minWidth: 0, flex: 1 }}>
+										<p style={{ fontSize: "10pt", fontWeight: 600, color: "var(--color-foreground)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{dev.name} — Button {btn.button}</p>
+										<p style={{ fontSize: "8pt", color: "var(--color-foreground-sec)", margin: 0 }}>{dev.ip}</p>
+									</div>
+									<Toggle on={btn.enabled} pending={iotPending === `${dev.device_id}:${btn.button}`} onToggle={() => handleIotToggle(dev.device_id, btn.button, !btn.enabled)} />
+								</div>
+							);
+						})
 					)}
 				</div>
 			)}

@@ -1,9 +1,13 @@
 use axum::extract::{Extension, Path};
 use axum::http::StatusCode;
+use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Json};
 use serde::{Deserialize, Serialize};
+use std::convert::Infallible;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::{broadcast, Mutex};
+use tokio_stream::wrappers::BroadcastStream;
+use tokio_stream::StreamExt as _;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -18,7 +22,6 @@ pub struct ButtonState {
 pub struct SmartButton {
     pub device_id: String,
     pub ip: String,
-    /// Human-readable name; defaults to device_id, editable later.
     pub name: String,
     pub buttons: Vec<ButtonState>,
     pub registered_at: String,
@@ -26,6 +29,7 @@ pub struct SmartButton {
 }
 
 pub type SmartButtonStore = Arc<Mutex<Vec<SmartButton>>>;
+pub type SmartButtonBroadcast = Arc<broadcast::Sender<Vec<SmartButton>>>;
 
 // ── Persistence ───────────────────────────────────────────────────────────────
 
@@ -60,9 +64,7 @@ pub struct CallbackPayload {
     pub kind: String,
     pub device_id: String,
     pub ip: String,
-    // register: full initial state
     pub state: Option<Vec<ButtonStatePayload>>,
-    // state_change: single button update
     pub button: Option<u8>,
     pub enabled: Option<bool>,
     pub uptime_s: Option<u64>,
@@ -77,6 +79,7 @@ pub struct ButtonStatePayload {
 // ── POST /smart-buttons/callback  (called by ESP32, no auth required) ─────────
 pub async fn post_callback(
     Extension(store): Extension<SmartButtonStore>,
+    Extension(broadcaster): Extension<SmartButtonBroadcast>,
     Json(payload): Json<CallbackPayload>,
 ) -> impl IntoResponse {
     let mut devices = store.lock().await;
@@ -96,7 +99,6 @@ pub async fn post_callback(
                 .collect();
 
             if let Some(dev) = devices.iter_mut().find(|d| d.device_id == payload.device_id) {
-                // Re-registration: update IP, buttons, last_seen. Preserve name.
                 dev.ip = payload.ip;
                 dev.buttons = buttons;
                 dev.last_seen = now;
@@ -115,10 +117,7 @@ pub async fn post_callback(
             if let (Some(btn), Some(enabled)) = (payload.button, payload.enabled) {
                 println!(
                     "[smart-button] state_change: device={} button={} enabled={} uptime={}s",
-                    payload.device_id,
-                    btn,
-                    enabled,
-                    payload.uptime_s.unwrap_or(0)
+                    payload.device_id, btn, enabled, payload.uptime_s.unwrap_or(0)
                 );
             }
             if let Some(dev) = devices.iter_mut().find(|d| d.device_id == payload.device_id) {
@@ -137,8 +136,6 @@ pub async fn post_callback(
                     }
                 }
             }
-            // If we get a state_change for an unknown device, ignore — it will
-            // register on next boot.
         }
         _ => {
             return (
@@ -150,6 +147,7 @@ pub async fn post_callback(
     }
 
     save_store(&devices);
+    let _ = broadcaster.send(devices.clone());
     (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response()
 }
 
@@ -161,8 +159,21 @@ pub async fn get_buttons(
     Json(devices.clone()).into_response()
 }
 
+// ── GET /smart-buttons/stream  (protected) ────────────────────────────────────
+pub async fn get_stream(
+    Extension(broadcaster): Extension<SmartButtonBroadcast>,
+) -> Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>> {
+    let rx = broadcaster.subscribe();
+    let stream = BroadcastStream::new(rx).filter_map(|msg| {
+        msg.ok().map(|data| {
+            let json = serde_json::to_string(&data).unwrap_or_default();
+            Ok(Event::default().data(json))
+        })
+    });
+    Sse::new(stream).keep_alive(KeepAlive::default())
+}
+
 // ── POST /smart-buttons/{id}/set  (protected) ─────────────────────────────────
-// Proxies { "button": N, "enabled": bool } to the ESP32's POST /api/set.
 #[derive(Deserialize)]
 pub struct SetPayload {
     pub button: u8,
@@ -172,6 +183,7 @@ pub struct SetPayload {
 pub async fn post_set(
     Path(id): Path<String>,
     Extension(store): Extension<SmartButtonStore>,
+    Extension(broadcaster): Extension<SmartButtonBroadcast>,
     Json(body): Json<SetPayload>,
 ) -> impl IntoResponse {
     let ip = {
@@ -201,7 +213,6 @@ pub async fn post_set(
         .await
     {
         Ok(resp) if resp.status().is_success() => {
-            // Update the local store immediately — don't wait for the ESP32's callback.
             let mut devices = store.lock().await;
             if let Some(dev) = devices.iter_mut().find(|d| d.device_id == id) {
                 if let Some(b) = dev.buttons.iter_mut().find(|b| b.button == body.button) {
@@ -211,6 +222,7 @@ pub async fn post_set(
                 }
             }
             save_store(&devices);
+            let _ = broadcaster.send(devices.clone());
             (StatusCode::OK, Json(serde_json::json!({ "ok": true, "button": body.button, "enabled": body.enabled }))).into_response()
         }
         Ok(resp) => {
@@ -229,6 +241,7 @@ pub async fn post_set(
 pub async fn delete_button(
     Path(id): Path<String>,
     Extension(store): Extension<SmartButtonStore>,
+    Extension(broadcaster): Extension<SmartButtonBroadcast>,
 ) -> impl IntoResponse {
     let mut devices = store.lock().await;
     let before = devices.len();
@@ -241,5 +254,6 @@ pub async fn delete_button(
             .into_response();
     }
     save_store(&devices);
+    let _ = broadcaster.send(devices.clone());
     (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response()
 }

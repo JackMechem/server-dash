@@ -1,32 +1,56 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
+import { useSmartButtons, type SmartButton, type ButtonState } from "../../lib/useSmartButtons";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-interface ButtonState {
-	button: number;
-	enabled: boolean;
-	uptime_s: number;
-}
-
-interface SmartButton {
-	device_id: string;
-	ip: string;
-	name: string;
-	buttons: ButtonState[];
-	registered_at: string;
-	last_seen: string;
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmtRelative(iso: string): string {
 	const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-	if (diff < 60)  return `${diff}s ago`;
+	if (diff < 60) return `${diff}s ago`;
 	if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
 	if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
 	return `${Math.floor(diff / 86400)}d ago`;
+}
+
+// ── Toggle switch ─────────────────────────────────────────────────────────────
+
+function Toggle({ on, pending, onToggle }: { on: boolean; pending: boolean; onToggle: () => void }) {
+	return (
+		<button
+			onClick={onToggle}
+			disabled={pending}
+			aria-checked={on}
+			role="switch"
+			style={{
+				position: "relative",
+				width: 40,
+				height: 22,
+				borderRadius: 11,
+				border: "none",
+				background: on
+					? "var(--color-blue)"
+					: "color-mix(in srgb, var(--color-secondary) 120%, transparent)",
+				cursor: pending ? "default" : "pointer",
+				opacity: pending ? 0.5 : 1,
+				transition: "background 150ms",
+				flexShrink: 0,
+				padding: 0,
+			}}
+		>
+			<span style={{
+				position: "absolute",
+				top: 3,
+				left: on ? 21 : 3,
+				width: 16,
+				height: 16,
+				borderRadius: "50%",
+				background: "#fff",
+				transition: "left 150ms",
+				boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+			}} />
+		</button>
+	);
 }
 
 // ── SmartButtonCard ───────────────────────────────────────────────────────────
@@ -50,59 +74,62 @@ function SmartButtonCard({
 		setPending(null);
 	};
 
-	const handleRemove = () => {
-		setRemoving(true);
-		onRemove(device.device_id);
-	};
+	const anyOn = device.buttons.some(b => b.enabled);
 
 	return (
 		<div style={{
-			border: "1px solid var(--color-secondary)",
-			borderRadius: 12,
+			border: `1px solid ${anyOn ? "color-mix(in srgb, var(--color-blue) 35%, transparent)" : "var(--color-secondary)"}`,
+			borderRadius: 14,
 			background: "var(--color-primary)",
 			overflow: "hidden",
+			transition: "border-color 200ms",
 		}}>
 			{/* Header */}
 			<div style={{
-				padding: "12px 16px",
-				borderBottom: "1px solid var(--color-secondary)",
+				padding: "14px 16px 12px",
+				borderBottom: "1px solid color-mix(in srgb, var(--color-secondary) 60%, transparent)",
 				display: "flex",
-				alignItems: "center",
+				alignItems: "flex-start",
 				justifyContent: "space-between",
 				gap: 8,
 			}}>
-				<div style={{ minWidth: 0 }}>
-					<p style={{ fontSize: "11pt", fontWeight: 600, color: "var(--color-foreground)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+				<div style={{ minWidth: 0, flex: 1 }}>
+					<p style={{ fontSize: "11.5pt", fontWeight: 700, color: "var(--color-foreground)", margin: "0 0 2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
 						{device.name}
 					</p>
-					<p style={{ fontSize: "9pt", color: "var(--color-foreground-sec)", margin: 0, fontFamily: "monospace" }}>
+					<p style={{ fontSize: "8.5pt", color: "var(--color-foreground-sec)", margin: 0, fontFamily: "monospace", opacity: 0.8 }}>
 						{device.ip}
 					</p>
 				</div>
 				<button
-					onClick={handleRemove}
+					onClick={() => { setRemoving(true); onRemove(device.device_id); }}
 					disabled={removing}
 					title="Remove device"
 					style={{
 						flexShrink: 0,
-						padding: "4px 8px",
+						width: 24,
+						height: 24,
+						display: "flex",
+						alignItems: "center",
+						justifyContent: "center",
 						borderRadius: 6,
 						border: "1px solid transparent",
 						background: "transparent",
 						color: "var(--color-foreground-sec)",
-						fontSize: "10pt",
+						fontSize: "11pt",
 						cursor: "pointer",
+						opacity: 0.5,
 						transition: "all 120ms",
 					}}
-					onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#ef4444"; (e.currentTarget as HTMLButtonElement).style.color = "#ef4444"; }}
-					onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "transparent"; (e.currentTarget as HTMLButtonElement).style.color = "var(--color-foreground-sec)"; }}
+					onMouseEnter={e => { const b = e.currentTarget; b.style.opacity = "1"; b.style.color = "#ef4444"; b.style.borderColor = "color-mix(in srgb, #ef4444 40%, transparent)"; b.style.background = "color-mix(in srgb, #ef4444 10%, transparent)"; }}
+					onMouseLeave={e => { const b = e.currentTarget; b.style.opacity = "0.5"; b.style.color = "var(--color-foreground-sec)"; b.style.borderColor = "transparent"; b.style.background = "transparent"; }}
 				>
 					{removing ? "…" : "✕"}
 				</button>
 			</div>
 
 			{/* Buttons */}
-			<div style={{ padding: "12px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
+			<div style={{ padding: "12px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
 				{device.buttons.length === 0 && (
 					<p style={{ fontSize: "9pt", color: "var(--color-foreground-sec)", margin: 0 }}>No button data yet.</p>
 				)}
@@ -113,39 +140,19 @@ function SmartButtonCard({
 						justifyContent: "space-between",
 						gap: 8,
 					}}>
-						<span style={{ fontSize: "10pt", color: "var(--color-foreground)", fontWeight: 500 }}>
-							Button {btn.button}
-						</span>
-						<button
-							onClick={() => handleToggle(btn)}
-							disabled={pending !== null}
-							style={{
-								display: "flex",
-								alignItems: "center",
-								gap: 6,
-								padding: "5px 12px",
-								borderRadius: 7,
-								border: `1px solid ${btn.enabled ? "color-mix(in srgb, var(--color-blue) 40%, transparent)" : "var(--color-secondary)"}`,
-								background: btn.enabled
-									? "color-mix(in srgb, var(--color-blue) 12%, transparent)"
-									: "color-mix(in srgb, var(--color-secondary) 40%, transparent)",
-								color: btn.enabled ? "var(--color-blue)" : "var(--color-foreground-sec)",
-								fontWeight: 600,
-								fontSize: "9.5pt",
-								cursor: pending !== null ? "default" : "pointer",
-								opacity: pending === btn.button ? 0.6 : 1,
-								transition: "all 120ms",
-							}}
-						>
-							<span style={{
-								width: 7, height: 7,
-								borderRadius: "50%",
-								background: btn.enabled ? "var(--color-blue)" : "var(--color-foreground-sec)",
-								flexShrink: 0,
-								transition: "background 120ms",
-							}} />
-							{pending === btn.button ? "…" : btn.enabled ? "ON" : "OFF"}
-						</button>
+						<div>
+							<p style={{ fontSize: "9.5pt", fontWeight: 600, color: "var(--color-foreground)", margin: 0 }}>
+								Button {btn.button}
+							</p>
+							<p style={{ fontSize: "8pt", color: btn.enabled ? "var(--color-blue)" : "var(--color-foreground-sec)", margin: 0, marginTop: 1, transition: "color 150ms" }}>
+								{btn.enabled ? "On" : "Off"}
+							</p>
+						</div>
+						<Toggle
+							on={btn.enabled}
+							pending={pending === btn.button}
+							onToggle={() => handleToggle(btn)}
+						/>
 					</div>
 				))}
 			</div>
@@ -153,15 +160,15 @@ function SmartButtonCard({
 			{/* Footer */}
 			<div style={{
 				padding: "8px 16px",
-				borderTop: "1px solid color-mix(in srgb, var(--color-secondary) 50%, transparent)",
+				borderTop: "1px solid color-mix(in srgb, var(--color-secondary) 40%, transparent)",
 				display: "flex",
 				justifyContent: "space-between",
 			}}>
-				<span style={{ fontSize: "8.5pt", color: "var(--color-foreground-sec)" }}>
+				<span style={{ fontSize: "8pt", color: "var(--color-foreground-sec)", opacity: 0.6 }}>
 					seen {fmtRelative(device.last_seen)}
 				</span>
-				<span style={{ fontSize: "8.5pt", color: "var(--color-foreground-sec)" }}>
-					added {fmtRelative(device.registered_at)}
+				<span style={{ fontSize: "8pt", color: "var(--color-foreground-sec)", opacity: 0.6 }}>
+					{device.device_id}
 				</span>
 			</div>
 		</div>
@@ -186,16 +193,16 @@ function AddDeviceDialog({ onClose, onAdded }: { onClose: () => void; onAdded: (
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ ip: trimmed }),
 		});
-		const data = await r.json();
 
 		if (!r.ok) {
-			setStatus(data.error ?? "Unknown error");
+			let msg = "Unknown error";
+			try { const d = await r.json(); msg = d.error ?? msg; } catch { msg = await r.text().catch(() => msg); }
+			setStatus(msg);
 			setLoading(false);
 			return;
 		}
 
 		setStatus("Registered. Waiting for handshake...");
-		// Give the ESP32 a moment to fire the callback POST back to dellserv
 		await new Promise(res => setTimeout(res, 1500));
 		setLoading(false);
 		onAdded();
@@ -203,29 +210,16 @@ function AddDeviceDialog({ onClose, onAdded }: { onClose: () => void; onAdded: (
 	};
 
 	return (
-		<div style={{
-			position: "fixed", inset: 0, zIndex: 1000,
-			background: "rgba(0,0,0,0.6)",
-			display: "flex", alignItems: "center", justifyContent: "center",
-			padding: 16,
-		}} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-			<div style={{
-				background: "var(--color-primary)",
-				border: "1px solid var(--color-secondary)",
-				borderRadius: 14,
-				padding: "24px",
-				width: "100%",
-				maxWidth: 380,
-			}}>
-				<p style={{ fontSize: "13pt", fontWeight: 700, color: "var(--color-foreground)", margin: "0 0 6px" }}>
-					Add Smart Button
-				</p>
+		<div
+			style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+			onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+		>
+			<div style={{ background: "var(--color-primary)", border: "1px solid var(--color-secondary)", borderRadius: 14, padding: "24px", width: "100%", maxWidth: 380 }}>
+				<p style={{ fontSize: "13pt", fontWeight: 700, color: "var(--color-foreground)", margin: "0 0 6px" }}>Add JMIoT Device</p>
 				<p style={{ fontSize: "9.5pt", color: "var(--color-foreground-sec)", margin: "0 0 20px" }}>
-					Enter the IP address of the ESP32 device. Make sure it's connected to the same network as this server.
+					Enter the IP address of the ESP32. Make sure it&apos;s on the same network as this server.
 				</p>
-				<label style={{ fontSize: "10pt", color: "var(--color-foreground-sec)", display: "block", marginBottom: 6 }}>
-					Device IP address
-				</label>
+				<label style={{ fontSize: "10pt", color: "var(--color-foreground-sec)", display: "block", marginBottom: 6 }}>Device IP address</label>
 				<input
 					type="text"
 					value={ip}
@@ -234,48 +228,17 @@ function AddDeviceDialog({ onClose, onAdded }: { onClose: () => void; onAdded: (
 					placeholder="192.168.1.42"
 					disabled={loading}
 					autoFocus
-					style={{
-						width: "100%",
-						padding: "8px 12px",
-						borderRadius: 8,
-						border: "1px solid var(--color-secondary)",
-						background: "color-mix(in srgb, var(--color-secondary) 30%, transparent)",
-						color: "var(--color-foreground)",
-						fontSize: "10pt",
-						fontFamily: "monospace",
-						outline: "none",
-						marginBottom: 16,
-					}}
+					style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--color-secondary)", background: "color-mix(in srgb, var(--color-secondary) 30%, transparent)", color: "var(--color-foreground)", fontSize: "10pt", fontFamily: "monospace", outline: "none", marginBottom: 16 }}
 				/>
-				{status && (
-					<p style={{ fontSize: "9pt", color: "var(--color-foreground-sec)", margin: "0 0 14px", fontStyle: "italic" }}>
-						{status}
-					</p>
-				)}
+				{status && <p style={{ fontSize: "9pt", color: "var(--color-foreground-sec)", margin: "0 0 14px", fontStyle: "italic" }}>{status}</p>}
 				<div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-					<button
-						onClick={onClose}
-						disabled={loading}
-						style={{
-							padding: "7px 16px", borderRadius: 8,
-							border: "1px solid var(--color-secondary)",
-							background: "transparent", color: "var(--color-foreground-sec)",
-							fontSize: "10pt", cursor: "pointer",
-						}}
-					>
+					<button onClick={onClose} disabled={loading} style={{ padding: "7px 16px", borderRadius: 8, border: "1px solid var(--color-secondary)", background: "transparent", color: "var(--color-foreground-sec)", fontSize: "10pt", cursor: "pointer" }}>
 						Cancel
 					</button>
 					<button
 						onClick={handleAdd}
 						disabled={loading || !ip.trim()}
-						style={{
-							padding: "7px 16px", borderRadius: 8,
-							border: "1px solid color-mix(in srgb, var(--color-blue) 50%, transparent)",
-							background: "color-mix(in srgb, var(--color-blue) 15%, transparent)",
-							color: "var(--color-blue)",
-							fontSize: "10pt", fontWeight: 600, cursor: loading ? "default" : "pointer",
-							opacity: loading || !ip.trim() ? 0.5 : 1,
-						}}
+						style={{ padding: "7px 16px", borderRadius: 8, border: "1px solid color-mix(in srgb, var(--color-blue) 50%, transparent)", background: "color-mix(in srgb, var(--color-blue) 15%, transparent)", color: "var(--color-blue)", fontSize: "10pt", fontWeight: 600, cursor: loading ? "default" : "pointer", opacity: loading || !ip.trim() ? 0.5 : 1 }}
 					>
 						{loading ? "Connecting..." : "Add Device"}
 					</button>
@@ -288,29 +251,11 @@ function AddDeviceDialog({ onClose, onAdded }: { onClose: () => void; onAdded: (
 // ── SmartButtonsPanel ─────────────────────────────────────────────────────────
 
 export default function SmartButtonsPanel() {
-	const [devices, setDevices] = useState<SmartButton[]>([]);
+	const { devices, reload } = useSmartButtons();
 	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState<string | null>(null);
 	const [showAdd, setShowAdd] = useState(false);
 
-	const load = useCallback(async () => {
-		try {
-			const r = await fetch("/api/smart-buttons");
-			if (!r.ok) throw new Error(`HTTP ${r.status}`);
-			setDevices(await r.json());
-			setError(null);
-		} catch (e: unknown) {
-			setError(e instanceof Error ? e.message : "Failed to load");
-		} finally {
-			setLoading(false);
-		}
-	}, []);
-
-	useEffect(() => {
-		load();
-		const id = setInterval(load, 5000);
-		return () => clearInterval(id);
-	}, [load]);
+	useEffect(() => { if (devices.length >= 0) setLoading(false); }, [devices]);
 
 	const handleToggle = async (id: string, button: number, enabled: boolean) => {
 		await fetch(`/api/smart-buttons/${id}/set`, {
@@ -318,85 +263,45 @@ export default function SmartButtonsPanel() {
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ button, enabled }),
 		});
-		await load();
 	};
 
 	const handleRemove = async (id: string) => {
 		await fetch(`/api/smart-buttons/${id}`, { method: "DELETE" });
-		await load();
 	};
 
 	return (
 		<div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
-			{/* Header */}
 			<div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
 				<div>
-					<p style={{ fontSize: "12pt", fontWeight: 700, color: "var(--color-foreground)", margin: 0 }}>
-						Smart Buttons
-					</p>
+					<p style={{ fontSize: "12pt", fontWeight: 700, color: "var(--color-foreground)", margin: 0 }}>JMIoT Devices</p>
 					<p style={{ fontSize: "9pt", color: "var(--color-foreground-sec)", margin: "2px 0 0" }}>
 						{devices.length} device{devices.length !== 1 ? "s" : ""} registered
 					</p>
 				</div>
 				<button
 					onClick={() => setShowAdd(true)}
-					style={{
-						padding: "7px 14px",
-						borderRadius: 8,
-						border: "1px solid color-mix(in srgb, var(--color-blue) 50%, transparent)",
-						background: "color-mix(in srgb, var(--color-blue) 12%, transparent)",
-						color: "var(--color-blue)",
-						fontSize: "10pt",
-						fontWeight: 600,
-						cursor: "pointer",
-					}}
+					style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid color-mix(in srgb, var(--color-blue) 50%, transparent)", background: "color-mix(in srgb, var(--color-blue) 12%, transparent)", color: "var(--color-blue)", fontSize: "10pt", fontWeight: 600, cursor: "pointer" }}
 				>
 					+ Add Device
 				</button>
 			</div>
 
-			{/* Content */}
-			{loading && (
-				<p style={{ fontSize: "9.5pt", color: "var(--color-foreground-sec)" }}>Loading...</p>
-			)}
-			{error && (
-				<p style={{ fontSize: "9.5pt", color: "#ef4444" }}>{error}</p>
-			)}
-			{!loading && !error && devices.length === 0 && (
-				<div style={{
-					border: "1px dashed var(--color-secondary)",
-					borderRadius: 12,
-					padding: "32px 24px",
-					textAlign: "center",
-				}}>
-					<p style={{ fontSize: "10pt", color: "var(--color-foreground-sec)", margin: "0 0 6px" }}>
-						No smart buttons registered yet.
-					</p>
-					<p style={{ fontSize: "9pt", color: "var(--color-foreground-sec)", margin: 0 }}>
-						Connect your ESP32 to WiFi, then click &ldquo;Add Device&rdquo; and enter its IP address.
-					</p>
+			{loading && <p style={{ fontSize: "9.5pt", color: "var(--color-foreground-sec)" }}>Loading...</p>}
+			{!loading && devices.length === 0 && (
+				<div style={{ border: "1px dashed var(--color-secondary)", borderRadius: 12, padding: "32px 24px", textAlign: "center" }}>
+					<p style={{ fontSize: "10pt", color: "var(--color-foreground-sec)", margin: "0 0 6px" }}>No JMIoT devices registered yet.</p>
+					<p style={{ fontSize: "9pt", color: "var(--color-foreground-sec)", margin: 0 }}>Connect your ESP32 to WiFi, then click &ldquo;Add Device&rdquo;.</p>
 				</div>
 			)}
-			{!loading && !error && devices.length > 0 && (
-				<div style={{
-					display: "grid",
-					gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
-					gap: 12,
-				}}>
+			{!loading && devices.length > 0 && (
+				<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12 }}>
 					{devices.map(d => (
-						<SmartButtonCard
-							key={d.device_id}
-							device={d}
-							onToggle={handleToggle}
-							onRemove={handleRemove}
-						/>
+						<SmartButtonCard key={d.device_id} device={d} onToggle={handleToggle} onRemove={handleRemove} />
 					))}
 				</div>
 			)}
 
-			{showAdd && (
-				<AddDeviceDialog onClose={() => setShowAdd(false)} onAdded={load} />
-			)}
+			{showAdd && <AddDeviceDialog onClose={() => setShowAdd(false)} onAdded={reload} />}
 		</div>
 	);
 }

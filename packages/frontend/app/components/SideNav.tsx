@@ -22,17 +22,19 @@ const COLLAPSED_W = 52;
 
 const SECTION_ICONS: Record<string, React.ElementType> = {
 	"power-analytics": IconBolt,
-	"smart-buttons":   IconToggleRight,
+	"devices":         IconToggleRight,
 };
 
 const ANALYTICS_ICONS: Record<PanelId, React.ElementType> = {
-	dashboard:          IconHome2,
-	"analytics-past":   IconHistory,
-	"analytics-live":   IconBolt,
-	"summary-cost":     IconCoin,
-	"summary-power":    IconPlug,
-	"summary-energy":   IconBattery4,
-	"smart-buttons":    IconToggleRight,
+	dashboard:           IconHome2,
+	"analytics-past":    IconHistory,
+	"analytics-live":    IconBolt,
+	"summary-cost":      IconCoin,
+	"summary-power":     IconPlug,
+	"summary-energy":    IconBattery4,
+	"devices-overview":  IconHome2,
+	"devices-jmiot":     IconToggleRight,
+	"devices-tapo":      IconPlug,
 };
 
 interface SideNavProps {

@@ -5,7 +5,9 @@ export type PanelId =
 	| "summary-cost"
 	| "summary-power"
 	| "summary-energy"
-	| "smart-buttons";
+	| "devices-overview"
+	| "devices-jmiot"
+	| "devices-tapo";
 
 export const PANEL_LABELS: Record<PanelId, string> = {
 	dashboard:           "Dashboard",
@@ -14,7 +16,9 @@ export const PANEL_LABELS: Record<PanelId, string> = {
 	"summary-cost":      "Electricity Cost",
 	"summary-power":     "Power Draw",
 	"summary-energy":    "Energy Usage",
-	"smart-buttons":     "Smart Buttons",
+	"devices-overview":  "Devices — Overview",
+	"devices-jmiot":     "Devices — JMIoT",
+	"devices-tapo":      "Devices — Tapo",
 };
 
 // ── Sidebar sections ──────────────────────────────────────────────────────────
@@ -35,10 +39,12 @@ export const PANEL_SECTIONS: PanelSection[] = [
 		],
 	},
 	{
-		id: "smart-buttons",
-		label: "Smart Buttons",
+		id: "devices",
+		label: "Devices",
 		items: [
-			{ panelId: "smart-buttons", label: "Devices" },
+			{ panelId: "devices-overview", label: "Overview" },
+			{ panelId: "devices-jmiot",    label: "JMIoT" },
+			{ panelId: "devices-tapo",     label: "Tapo" },
 		],
 	},
 ];
