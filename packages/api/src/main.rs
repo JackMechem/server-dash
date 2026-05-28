@@ -7,13 +7,11 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 use tokio::sync::{Mutex, RwLock, broadcast};
 
-mod app_credentials;
 mod auth;
 mod config;
 mod models;
 mod routes;
 mod settings;
-mod totp;
 
 #[tokio::main]
 async fn main() {
@@ -28,8 +26,8 @@ async fn main() {
             eprintln!("Usage: server-dash-api --create-user <username> <password>");
             std::process::exit(1);
         }
-        if app_credentials::load_all().is_empty() {
-            match app_credentials::create_initial_user(username, password) {
+        if auth::credentials::load_all().is_empty() {
+            match auth::credentials::create_initial_user(username, password) {
                 Ok(_) => println!("Created initial user '{}'.", username),
                 Err(e) => {
                     eprintln!("Failed to create user: {}", e);
@@ -42,8 +40,8 @@ async fn main() {
     }
 
     if args.iter().any(|a| a == "-d") {
-        let cache: routes::power::TapoDeviceCache = Arc::new(Mutex::new(vec![]));
-        routes::power::refresh_device_cache(&cache).await;
+        let cache: routes::devices::tapo::TapoDeviceCache = Arc::new(Mutex::new(vec![]));
+        routes::devices::tapo::refresh_device_cache(&cache).await;
         let devices = cache.lock().await;
         if devices.is_empty() {
             println!("No Tapo devices found.");
@@ -57,25 +55,28 @@ async fn main() {
 
     let state = Arc::new(auth::AppState::new());
 
-    let smart_button_store: routes::smart_buttons::SmartButtonStore =
-        Arc::new(Mutex::new(routes::smart_buttons::load_store()));
+    let smart_button_store: routes::devices::smart_buttons::SmartButtonStore =
+        Arc::new(Mutex::new(routes::devices::smart_buttons::load_store()));
     let (sb_tx, _) = broadcast::channel(32);
-    let smart_button_broadcast: routes::smart_buttons::SmartButtonBroadcast = Arc::new(sb_tx);
+    let smart_button_broadcast: routes::devices::smart_buttons::SmartButtonBroadcast = Arc::new(sb_tx);
 
-    let power_history: routes::power::PowerHistory =
-        Arc::new(Mutex::new(routes::power::load_history()));
+    let automation_store: routes::devices::automations::AutomationStore =
+        Arc::new(Mutex::new(routes::devices::automations::load_store()));
 
-    let device_cache: routes::power::TapoDeviceCache = Arc::new(Mutex::new(vec![]));
-    let live_cache: routes::power::LivePowerCache = Arc::new(RwLock::new(HashMap::new()));
-    let active_timer: routes::power::ActiveClientTimer = Arc::new(AtomicU64::new(0));
+    let power_history: routes::devices::tapo::PowerHistory =
+        Arc::new(Mutex::new(routes::devices::tapo::load_history()));
+
+    let device_cache: routes::devices::tapo::TapoDeviceCache = Arc::new(Mutex::new(vec![]));
+    let live_cache: routes::devices::tapo::LivePowerCache = Arc::new(RwLock::new(HashMap::new()));
+    let active_timer: routes::devices::tapo::ActiveClientTimer = Arc::new(AtomicU64::new(0));
     let (power_tx, _) = broadcast::channel(64);
-    let power_broadcast: routes::power::PowerBroadcast = Arc::new(power_tx);
+    let power_broadcast: routes::devices::tapo::PowerBroadcast = Arc::new(power_tx);
 
     // Periodically rediscover Tapo devices on the subnet.
     let bg_cache = Arc::clone(&device_cache);
     tokio::spawn(async move {
         loop {
-            routes::power::refresh_device_cache(&bg_cache).await;
+            routes::devices::tapo::refresh_device_cache(&bg_cache).await;
             tokio::time::sleep(tokio::time::Duration::from_secs(600)).await;
         }
     });
@@ -86,7 +87,7 @@ async fn main() {
     let bg_timer = Arc::clone(&active_timer);
     let bg_broadcast = Arc::clone(&power_broadcast);
     tokio::spawn(async move {
-        routes::power::live_poll_loop(bg_device_cache, bg_live_cache, bg_timer, bg_broadcast).await;
+        routes::devices::tapo::live_poll_loop(bg_device_cache, bg_live_cache, bg_timer, bg_broadcast).await;
     });
 
     // Periodically snapshot live data into history.
@@ -95,7 +96,7 @@ async fn main() {
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(tokio::time::Duration::from_secs(300)).await;
-            routes::power::record_snapshot(&bg_history, &bg_live_cache2).await;
+            routes::devices::tapo::record_snapshot(&bg_history, &bg_live_cache2).await;
         }
     });
 
@@ -114,13 +115,13 @@ async fn main() {
             "/users/{username}/credentials/{cred_id}/label",
             put(routes::users::rename_credential),
         )
-        .route("/users/{username}/totp", delete(totp::delete_totp))
+        .route("/users/{username}/totp", delete(auth::totp::delete_totp))
         .route(
             "/users/{username}/password",
             put(routes::users::reset_password),
         )
-        .route("/power/{device}/on", post(routes::power::power_on))
-        .route("/power/{device}/off", post(routes::power::power_off))
+        .route("/power/{device}/on", post(routes::devices::tapo::power_on))
+        .route("/power/{device}/off", post(routes::devices::tapo::power_off))
         .route(
             "/services/{service}/restart",
             post(routes::services::restart_service),
@@ -139,19 +140,25 @@ async fn main() {
         )
         .route("/system/reboot", post(routes::system::system_reboot))
         .route("/system/shutdown", post(routes::system::system_shutdown))
-        .route("/smart-buttons", get(routes::smart_buttons::get_buttons))
-        .route("/smart-buttons/stream", get(routes::smart_buttons::get_stream))
-        .route("/smart-buttons/{id}/set", post(routes::smart_buttons::post_set))
-        .route("/smart-buttons/{id}", delete(routes::smart_buttons::delete_button))
+        .route("/smart-buttons", get(routes::devices::smart_buttons::get_buttons))
+        .route("/smart-buttons/stream", get(routes::devices::smart_buttons::get_stream))
+        .route("/smart-buttons/{id}/set", post(routes::devices::smart_buttons::post_set))
+        .route("/smart-buttons/{id}/rename", post(routes::devices::smart_buttons::post_rename))
+        .route("/smart-buttons/{id}", delete(routes::devices::smart_buttons::delete_button))
+        .route("/automations", get(routes::devices::automations::get_automations))
+        .route("/automations", post(routes::devices::automations::post_automation))
+        .route("/automations/{id}", put(routes::devices::automations::put_automation))
+        .route("/automations/{id}", delete(routes::devices::automations::delete_automation))
+        .route("/automations/{id}/trigger", post(routes::devices::automations::trigger_automation))
         .route_layer(middleware::from_fn(auth::require_auth));
 
     let app = Router::new()
         .route("/", get(|| async { Redirect::permanent("/stats") }))
         .route("/stats", get(routes::stats::get_stats))
-        .route("/power", get(routes::power::get_power))
-        .route("/power/stream", get(routes::power::get_power_stream))
-        .route("/power/history", get(routes::power::get_power_history))
-        .route("/smart-buttons/callback", post(routes::smart_buttons::post_callback))
+        .route("/power", get(routes::devices::tapo::get_power))
+        .route("/power/stream", get(routes::devices::tapo::get_power_stream))
+        .route("/power/history", get(routes::devices::tapo::get_power_history))
+        .route("/smart-buttons/callback", post(routes::devices::smart_buttons::post_callback))
         .route("/auth/login", post(auth::post_login))
         .route("/auth/verify", post(auth::post_verify))
         .route("/auth/verify-totp", post(auth::post_verify_totp))
@@ -159,11 +166,11 @@ async fn main() {
         .route("/auth/register/finish", post(auth::post_register_finish))
         .route(
             "/users/{username}/totp/setup",
-            post(totp::post_totp_setup),
+            post(auth::totp::post_totp_setup),
         )
         .route(
             "/users/{username}/totp/confirm",
-            post(totp::post_totp_confirm),
+            post(auth::totp::post_totp_confirm),
         )
         .merge(protected)
         .with_state(state)
@@ -173,7 +180,8 @@ async fn main() {
         .layer(Extension(active_timer))
         .layer(Extension(power_broadcast))
         .layer(Extension(smart_button_store))
-        .layer(Extension(smart_button_broadcast));
+        .layer(Extension(smart_button_broadcast))
+        .layer(Extension(automation_store));
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3001")
         .await

@@ -3,9 +3,9 @@ use base64::{Engine, engine::general_purpose};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
-use crate::app_credentials;
+use crate::auth::credentials as app_credentials;
 use crate::auth::{load_credentials, save_credentials, CREDENTIAL_DIR};
-use crate::totp::{has_totp, TOTP_DIR};
+use crate::auth::totp::{has_totp, TOTP_DIR};
 
 #[derive(Deserialize)]
 pub struct ResetPasswordBody {

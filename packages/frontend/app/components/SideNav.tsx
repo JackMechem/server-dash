@@ -8,6 +8,7 @@ import {
 	IconMenu2, IconX, IconKey, IconLogout, IconUsers, IconTerminal2, IconDownload,
 	IconChevronDown, IconChevronRight, IconBolt, IconHistory, IconHelpCircle,
 	IconCoin, IconPlug, IconBattery4, IconUserCog, IconArrowLeft, IconCheck, IconToggleRight,
+	IconAutomation,
 } from "@tabler/icons-react";
 import { useTheme, useSetTheme, type Theme } from "@/stores/useThemeStore";
 import { createPortal } from "react-dom";
@@ -26,15 +27,16 @@ const SECTION_ICONS: Record<string, React.ElementType> = {
 };
 
 const ANALYTICS_ICONS: Record<PanelId, React.ElementType> = {
-	dashboard:           IconHome2,
-	"analytics-past":    IconHistory,
-	"analytics-live":    IconBolt,
-	"summary-cost":      IconCoin,
-	"summary-power":     IconPlug,
-	"summary-energy":    IconBattery4,
-	"devices-overview":  IconHome2,
-	"devices-jmiot":     IconToggleRight,
-	"devices-tapo":      IconPlug,
+	dashboard:                IconHome2,
+	"analytics-past":         IconHistory,
+	"analytics-live":         IconBolt,
+	"summary-cost":           IconCoin,
+	"summary-power":          IconPlug,
+	"summary-energy":         IconBattery4,
+	"devices-overview":       IconHome2,
+	"devices-jmiot":          IconToggleRight,
+	"devices-tapo":           IconPlug,
+	"devices-automations":    IconAutomation,
 };
 
 interface SideNavProps {

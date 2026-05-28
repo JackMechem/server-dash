@@ -1,3 +1,6 @@
+pub mod credentials;
+pub mod totp;
+
 use axum::body::Body;
 use axum::extract::State;
 use axum::{
@@ -256,9 +259,9 @@ pub async fn post_login(
 
     // Check app credentials first; only fall back to /etc/shadow if explicitly enabled
     let (system_user, app_username) = {
-        let all = crate::app_credentials::load_all();
+        let all = crate::auth::credentials::load_all();
         if let Some(cred) = all.iter().find(|c| c.username == username) {
-            if !crate::app_credentials::verify_app_password(&password, &cred.password_hash) {
+            if !crate::auth::credentials::verify_app_password(&password, &cred.password_hash) {
                 return (StatusCode::UNAUTHORIZED, "Invalid credentials").into_response();
             }
             // Use system_user for 2FA lookups if set, otherwise use app username
@@ -283,7 +286,7 @@ pub async fn post_login(
     }
 
     let stored_webauthn = load_credentials(&system_user);
-    let has_totp = crate::totp::has_totp(&system_user);
+    let has_totp = crate::auth::totp::has_totp(&system_user);
 
     // No 2FA registered — issue token directly so the user can enroll
     if stored_webauthn.is_none() && !has_totp {
@@ -413,7 +416,7 @@ pub async fn post_verify_totp(
         }
     };
 
-    if !crate::totp::verify_totp_code(&system_user, &body.code) {
+    if !crate::auth::totp::verify_totp_code(&system_user, &body.code) {
         return (StatusCode::UNAUTHORIZED, "Invalid TOTP code").into_response();
     }
 
@@ -439,9 +442,9 @@ pub async fn post_register_start(
 
     // Mirror post_login: check app credentials first, fall back to /etc/shadow
     let system_user = {
-        let all = crate::app_credentials::load_all();
+        let all = crate::auth::credentials::load_all();
         if let Some(cred) = all.iter().find(|c| c.username == username) {
-            if !crate::app_credentials::verify_app_password(&password, &cred.password_hash) {
+            if !crate::auth::credentials::verify_app_password(&password, &cred.password_hash) {
                 return (StatusCode::UNAUTHORIZED, "Invalid credentials").into_response();
             }
             cred.system_user.clone().unwrap_or_else(|| username.clone())

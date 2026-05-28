@@ -13,6 +13,7 @@ const SummaryPanel          = lazy(() => import("../panels/SummaryPanel"));
 const SmartButtonsPanel     = lazy(() => import("../panels/SmartButtonsPanel"));
 const TapoPanel             = lazy(() => import("../panels/TapoPanel"));
 const DevicesOverviewPanel  = lazy(() => import("../panels/DevicesOverviewPanel"));
+const AutomationsPanel      = lazy(() => import("../panels/AutomationsPanel"));
 
 function PanelContent({ panelId, isAuthed }: { panelId: PanelId; isAuthed: boolean }) {
 	return (
@@ -23,9 +24,10 @@ function PanelContent({ panelId, isAuthed }: { panelId: PanelId; isAuthed: boole
 			{panelId === "summary-cost"      && <SummaryPanel type="cost" />}
 			{panelId === "summary-power"     && <SummaryPanel type="power" />}
 			{panelId === "summary-energy"    && <SummaryPanel type="energy" />}
-			{panelId === "devices-jmiot"     && <SmartButtonsPanel />}
-			{panelId === "devices-tapo"      && <TapoPanel />}
-			{panelId === "devices-overview"  && <DevicesOverviewPanel />}
+			{panelId === "devices-jmiot"        && <SmartButtonsPanel />}
+			{panelId === "devices-tapo"         && <TapoPanel />}
+			{panelId === "devices-overview"     && <DevicesOverviewPanel />}
+			{panelId === "devices-automations"  && <AutomationsPanel />}
 		</Suspense>
 	);
 }

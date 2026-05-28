@@ -7,18 +7,20 @@ export type PanelId =
 	| "summary-energy"
 	| "devices-overview"
 	| "devices-jmiot"
-	| "devices-tapo";
+	| "devices-tapo"
+	| "devices-automations";
 
 export const PANEL_LABELS: Record<PanelId, string> = {
-	dashboard:           "Dashboard",
-	"analytics-past":    "Power Analytics — Past Data",
-	"analytics-live":    "Power Analytics — Live Data",
-	"summary-cost":      "Electricity Cost",
-	"summary-power":     "Power Draw",
-	"summary-energy":    "Energy Usage",
-	"devices-overview":  "Devices — Overview",
-	"devices-jmiot":     "Devices — JMIoT",
-	"devices-tapo":      "Devices — Tapo",
+	dashboard:                "Dashboard",
+	"analytics-past":         "Power Analytics — Past Data",
+	"analytics-live":         "Power Analytics — Live Data",
+	"summary-cost":           "Electricity Cost",
+	"summary-power":          "Power Draw",
+	"summary-energy":         "Energy Usage",
+	"devices-overview":       "Devices — Overview",
+	"devices-jmiot":          "Devices — JMIoT",
+	"devices-tapo":           "Devices — Tapo",
+	"devices-automations":    "Devices — Automations",
 };
 
 // ── Sidebar sections ──────────────────────────────────────────────────────────
@@ -42,9 +44,10 @@ export const PANEL_SECTIONS: PanelSection[] = [
 		id: "devices",
 		label: "Devices",
 		items: [
-			{ panelId: "devices-overview", label: "Overview" },
-			{ panelId: "devices-jmiot",    label: "JMIoT" },
-			{ panelId: "devices-tapo",     label: "Tapo" },
+			{ panelId: "devices-overview",     label: "Overview" },
+			{ panelId: "devices-jmiot",        label: "JMIoT" },
+			{ panelId: "devices-tapo",         label: "Tapo" },
+			{ panelId: "devices-automations",  label: "Automations" },
 		],
 	},
 ];

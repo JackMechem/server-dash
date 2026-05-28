@@ -5,12 +5,12 @@ use axum::{
 use base64::{Engine, engine::general_purpose};
 use serde::Deserialize;
 
-use crate::app_credentials::{
+use crate::auth::credentials::{
     find_by_username, hash_password, load_all, resolve_effective_user, save_all,
     verify_app_password, AppCredential, PermissionLevel,
 };
 use crate::auth::{get_token_subject, load_credentials};
-use crate::totp::has_totp;
+use crate::auth::totp::has_totp;
 
 // GET /account — returns the current user's app credential info
 pub async fn get_account(headers: HeaderMap) -> impl IntoResponse {

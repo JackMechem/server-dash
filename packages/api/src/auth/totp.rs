@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use totp_rs::{Algorithm, Secret, TOTP};
 
-use crate::auth::{decode_basic_auth, verify_password};
-use crate::app_credentials;
+use super::{decode_basic_auth, verify_password};
+use super::credentials as app_credentials;
 
 pub(crate) const TOTP_DIR: &str = "/var/lib/server-dash-api/totp";
 

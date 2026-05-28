@@ -53,6 +53,95 @@ function Toggle({ on, pending, onToggle }: { on: boolean; pending: boolean; onTo
 	);
 }
 
+// ── PencilIcon ────────────────────────────────────────────────────────────────
+
+function PencilIcon() {
+	return (
+		<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+			<path d="M11.5 2.5a2.121 2.121 0 0 1 3 3L5 15H2v-3L11.5 2.5Z" />
+		</svg>
+	);
+}
+
+// ── InlineEdit ────────────────────────────────────────────────────────────────
+
+function InlineEdit({
+	value,
+	placeholder,
+	onSave,
+	textStyle,
+}: {
+	value: string;
+	placeholder: string;
+	onSave: (newValue: string) => Promise<void>;
+	textStyle?: React.CSSProperties;
+}) {
+	const [editing, setEditing] = useState(false);
+	const [draft, setDraft] = useState(value);
+
+	const commit = async () => {
+		setEditing(false);
+		const trimmed = draft.trim();
+		if (trimmed && trimmed !== value) {
+			await onSave(trimmed);
+		} else {
+			setDraft(value);
+		}
+	};
+
+	if (editing) {
+		return (
+			<input
+				autoFocus
+				value={draft}
+				onChange={e => setDraft(e.target.value)}
+				onBlur={commit}
+				onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setDraft(value); setEditing(false); } }}
+				style={{
+					fontSize: "inherit",
+					fontWeight: "inherit",
+					fontFamily: "inherit",
+					color: "var(--color-foreground)",
+					background: "color-mix(in srgb, var(--color-secondary) 40%, transparent)",
+					border: "1px solid color-mix(in srgb, var(--color-blue) 50%, transparent)",
+					borderRadius: 5,
+					padding: "1px 6px",
+					outline: "none",
+					width: "100%",
+					...textStyle,
+				}}
+			/>
+		);
+	}
+
+	return (
+		<span style={{ display: "inline-flex", alignItems: "center", gap: 4, minWidth: 0 }}>
+			<span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", ...textStyle }}>{value}</span>
+			<button
+				onClick={() => { setDraft(value); setEditing(true); }}
+				title="Rename"
+				style={{
+					flexShrink: 0,
+					display: "inline-flex",
+					alignItems: "center",
+					padding: 2,
+					border: "none",
+					background: "transparent",
+					color: "var(--color-foreground-sec)",
+					opacity: 0.4,
+					cursor: "pointer",
+					borderRadius: 3,
+					transition: "opacity 120ms",
+				}}
+				onMouseEnter={e => { e.currentTarget.style.opacity = "1"; }}
+				onMouseLeave={e => { e.currentTarget.style.opacity = "0.4"; }}
+			>
+				<PencilIcon />
+			</button>
+		</span>
+	);
+}
+
 // ── SmartButtonCard ───────────────────────────────────────────────────────────
 
 function SmartButtonCard({
@@ -74,7 +163,16 @@ function SmartButtonCard({
 		setPending(null);
 	};
 
+	const sendRename = async (body: { device_name?: string; button_names?: Record<number, string> }) => {
+		await fetch(`/api/smart-buttons/${device.device_id}/rename`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(body),
+		});
+	};
+
 	const anyOn = device.buttons.some(b => b.enabled);
+	const displayName = device.device_name ?? device.name;
 
 	return (
 		<div style={{
@@ -94,9 +192,13 @@ function SmartButtonCard({
 				gap: 8,
 			}}>
 				<div style={{ minWidth: 0, flex: 1 }}>
-					<p style={{ fontSize: "11.5pt", fontWeight: 700, color: "var(--color-foreground)", margin: "0 0 2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-						{device.name}
-					</p>
+					<div style={{ fontSize: "11.5pt", fontWeight: 700, color: "var(--color-foreground)", margin: "0 0 2px" }}>
+						<InlineEdit
+							value={displayName}
+							placeholder={device.name}
+							onSave={name => sendRename({ device_name: name })}
+						/>
+					</div>
 					<p style={{ fontSize: "8.5pt", color: "var(--color-foreground-sec)", margin: 0, fontFamily: "monospace", opacity: 0.8 }}>
 						{device.ip}
 					</p>
@@ -140,10 +242,14 @@ function SmartButtonCard({
 						justifyContent: "space-between",
 						gap: 8,
 					}}>
-						<div>
-							<p style={{ fontSize: "9.5pt", fontWeight: 600, color: "var(--color-foreground)", margin: 0 }}>
-								Button {btn.button}
-							</p>
+						<div style={{ minWidth: 0, flex: 1 }}>
+							<div style={{ fontSize: "9.5pt", fontWeight: 600, color: "var(--color-foreground)", margin: 0 }}>
+								<InlineEdit
+									value={btn.name ?? `Button ${btn.button}`}
+									placeholder={`Button ${btn.button}`}
+									onSave={name => sendRename({ button_names: { [btn.button]: name } })}
+								/>
+							</div>
 							<p style={{ fontSize: "8pt", color: btn.enabled ? "var(--color-blue)" : "var(--color-foreground-sec)", margin: 0, marginTop: 1, transition: "color 150ms" }}>
 								{btn.enabled ? "On" : "Off"}
 							</p>

@@ -466,6 +466,31 @@ pub async fn power_on(
     }
 }
 
+/// Shared helper — used by automations and HTTP handlers alike.
+pub async fn tapo_set_power(cache: &TapoDeviceCache, device_name: &str, on: bool) -> Result<(), String> {
+    let ip = cache
+        .lock()
+        .await
+        .iter()
+        .find(|(n, _)| n == device_name)
+        .map(|(_, ip)| ip.clone())
+        .ok_or_else(|| format!("device '{}' not found in cache", device_name))?;
+
+    let username = std::env::var("TAPO_USERNAME").unwrap_or_default();
+    let password = std::env::var("TAPO_PASSWORD").unwrap_or_default();
+    if username.is_empty() || password.is_empty() {
+        return Err("TAPO_USERNAME / TAPO_PASSWORD not set".to_string());
+    }
+
+    let device = ApiClient::new(&username, &password)
+        .p110(&ip)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if on { device.on().await } else { device.off().await }
+        .map_err(|e| e.to_string())
+}
+
 pub async fn power_off(
     Path(name): Path<String>,
     Extension(cache): Extension<TapoDeviceCache>,
