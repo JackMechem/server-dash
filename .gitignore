@@ -2,5 +2,16 @@
 result
 flake.lock
 
-# secrets
-.env*
+# node
+node_modules/
+.pnpm-store/
+
+# next.js
+.next/
+out/
+
+# rust
+target/
+
+# config (keep example, ignore real config)
+/config.toml
