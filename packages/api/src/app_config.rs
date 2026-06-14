@@ -26,6 +26,9 @@ password = ""
 # subnet = "192.168.1"
 
 [server]
+# Address the frontend Next.js server binds to. Defaults to 0.0.0.0 (all interfaces).
+# frontend_host = "0.0.0.0"
+
 # LAN IP of this server — used as the callback URL registered with ESP32 smart buttons.
 # Leave commented out to auto-detect.
 # dellserv_ip = "192.168.1.100"

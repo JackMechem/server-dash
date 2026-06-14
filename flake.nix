@@ -145,12 +145,17 @@
                                 Group = "server-dash";
                                 ExecStartPre = "${pkgs.bash}/bin/bash -c 'test -f ${config.services.server-dash.package}/packages/frontend/server.js || (echo \"Build not found, run pnpm deploy first\" && exit 1)'";
                                 WorkingDirectory = config.services.server-dash.package;
-                                ExecStart = "${pkgs.nodejs}/bin/node ${config.services.server-dash.package}/packages/frontend/server.js";
+                                ExecStart = let
+                                    launcher = pkgs.writeShellScript "server-dash-launcher" ''
+                                        host=$(${pkgs.gnugrep}/bin/grep -oP 'frontend_host\s*=\s*"\K[^"]+' /etc/server-dash/config.toml 2>/dev/null)
+                                        export HOSTNAME="''${host:-0.0.0.0}"
+                                        exec ${pkgs.nodejs}/bin/node ${config.services.server-dash.package}/packages/frontend/server.js
+                                    '';
+                                in "${launcher}";
                                 Restart = "on-failure";
                                 RestartSec = "10s";
                                 Environment = [
                                     "PORT=3000"
-                                    "HOSTNAME=127.0.0.1"
                                     "NODE_ENV=production"
                                 ];
                             };
