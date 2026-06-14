@@ -1,0 +1,30 @@
+# server-dash configuration
+# Copy to /etc/server-dash/config.toml and edit as needed.
+# sudo mkdir -p /etc/server-dash
+# sudo cp config.example.toml /etc/server-dash/config.toml
+# sudo chmod 640 /etc/server-dash/config.toml
+
+# Set to false once you have filled in your settings below.
+useDefaultConfig = true
+
+[features]
+# Set to false to disable all Tapo smart-plug features (polling, power routes, history).
+tapo = true
+
+# Set to true to open the /enroll registration flow so new users can register.
+# Keep false after initial setup.
+enrollment_open = false
+
+[tapo]
+# Your Tapo account credentials (the email/password used in the Tapo mobile app).
+username = ""
+password = ""
+
+# Subnet to scan for Tapo devices (e.g. "192.168.1").
+# Leave commented out to auto-detect from the local network interface.
+# subnet = "192.168.1"
+
+[server]
+# LAN IP of this server — used as the callback URL registered with ESP32 smart buttons.
+# Leave commented out to auto-detect.
+# dellserv_ip = "192.168.1.100"

@@ -52,10 +52,10 @@ pub fn load_history() -> Vec<models::PowerHistoryEntry> {
     }
 }
 
-fn get_local_subnet() -> Option<String> {
-    if let Ok(subnet) = std::env::var("TAPO_SUBNET") {
-        if !subnet.is_empty() {
-            return Some(subnet);
+fn get_local_subnet(subnet_override: Option<&str>) -> Option<String> {
+    if let Some(s) = subnet_override {
+        if !s.is_empty() {
+            return Some(s.to_owned());
         }
     }
     let socket = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
@@ -69,15 +69,18 @@ fn get_local_subnet() -> Option<String> {
     }
 }
 
-pub async fn refresh_device_cache(cache: &TapoDeviceCache) {
-    let username = std::env::var("TAPO_USERNAME").unwrap_or_default();
-    let password = std::env::var("TAPO_PASSWORD").unwrap_or_default();
+pub async fn refresh_device_cache(
+    cache: &TapoDeviceCache,
+    username: &str,
+    password: &str,
+    subnet_override: Option<&str>,
+) {
     if username.is_empty() || password.is_empty() {
-        eprintln!("Tapo discovery: TAPO_USERNAME/TAPO_PASSWORD not set");
+        eprintln!("Tapo discovery: credentials not configured");
         return;
     }
 
-    let subnet = match get_local_subnet() {
+    let subnet = match get_local_subnet(subnet_override) {
         Some(s) => s,
         None => {
             eprintln!("Tapo discovery: could not determine local subnet");
@@ -111,8 +114,8 @@ pub async fn refresh_device_cache(cache: &TapoDeviceCache) {
     let auth_tasks: Vec<_> = responsive
         .into_iter()
         .map(|ip| {
-            let username = username.clone();
-            let password = password.clone();
+            let username = username.to_owned();
+            let password = password.to_owned();
             tokio::spawn(async move {
                 let result = tokio::time::timeout(
                     tokio::time::Duration::from_secs(10),
@@ -305,13 +308,12 @@ pub async fn live_poll_loop(
     live_cache: LivePowerCache,
     active_timer: ActiveClientTimer,
     broadcaster: PowerBroadcast,
+    username: String,
+    password: String,
 ) {
     let mut running: HashMap<String, tokio::task::JoinHandle<()>> = HashMap::new();
 
     loop {
-        let username = std::env::var("TAPO_USERNAME").unwrap_or_default();
-        let password = std::env::var("TAPO_PASSWORD").unwrap_or_default();
-
         if !username.is_empty() && !password.is_empty() {
             let device_list = device_cache.lock().await.clone();
             let current_names: HashSet<String> =
@@ -380,16 +382,16 @@ pub async fn get_power_history(
     Json(serde_json::json!({ "readings": readings })).into_response()
 }
 
-fn credentials() -> Result<(String, String), (StatusCode, Json<models::ActionResponse>)> {
-    let u = std::env::var("TAPO_USERNAME").unwrap_or_default();
-    let p = std::env::var("TAPO_PASSWORD").unwrap_or_default();
-    if u.is_empty() || p.is_empty() {
+fn credentials(
+    tapo: &crate::app_config::TapoConfig,
+) -> Result<(String, String), (StatusCode, Json<models::ActionResponse>)> {
+    if tapo.is_configured() {
+        Ok((tapo.username.clone(), tapo.password.clone()))
+    } else {
         Err(models::ActionResponse::err(
             StatusCode::INTERNAL_SERVER_ERROR,
-            "TAPO_USERNAME / TAPO_PASSWORD not set",
+            "Tapo credentials not configured",
         ))
-    } else {
-        Ok((u, p))
     }
 }
 
@@ -435,6 +437,7 @@ pub async fn get_power_stream(
 pub async fn power_on(
     Path(name): Path<String>,
     Extension(cache): Extension<TapoDeviceCache>,
+    Extension(cfg): Extension<Arc<crate::app_config::Config>>,
 ) -> impl IntoResponse {
     let ip = cache
         .lock()
@@ -451,7 +454,7 @@ pub async fn power_on(
             )
         }
     };
-    let (username, password) = match credentials() {
+    let (username, password) = match credentials(&cfg.tapo) {
         Ok(c) => c,
         Err(e) => return e,
     };
@@ -467,7 +470,16 @@ pub async fn power_on(
 }
 
 /// Shared helper — used by automations and HTTP handlers alike.
-pub async fn tapo_set_power(cache: &TapoDeviceCache, device_name: &str, on: bool) -> Result<(), String> {
+pub async fn tapo_set_power(
+    cache: &TapoDeviceCache,
+    device_name: &str,
+    on: bool,
+    tapo: &crate::app_config::TapoConfig,
+) -> Result<(), String> {
+    if !tapo.is_configured() {
+        return Err("Tapo credentials not configured".to_string());
+    }
+
     let ip = cache
         .lock()
         .await
@@ -476,13 +488,7 @@ pub async fn tapo_set_power(cache: &TapoDeviceCache, device_name: &str, on: bool
         .map(|(_, ip)| ip.clone())
         .ok_or_else(|| format!("device '{}' not found in cache", device_name))?;
 
-    let username = std::env::var("TAPO_USERNAME").unwrap_or_default();
-    let password = std::env::var("TAPO_PASSWORD").unwrap_or_default();
-    if username.is_empty() || password.is_empty() {
-        return Err("TAPO_USERNAME / TAPO_PASSWORD not set".to_string());
-    }
-
-    let device = ApiClient::new(&username, &password)
+    let device = ApiClient::new(&tapo.username, &tapo.password)
         .p110(&ip)
         .await
         .map_err(|e| e.to_string())?;
@@ -494,6 +500,7 @@ pub async fn tapo_set_power(cache: &TapoDeviceCache, device_name: &str, on: bool
 pub async fn power_off(
     Path(name): Path<String>,
     Extension(cache): Extension<TapoDeviceCache>,
+    Extension(cfg): Extension<Arc<crate::app_config::Config>>,
 ) -> impl IntoResponse {
     let ip = cache
         .lock()
@@ -510,7 +517,7 @@ pub async fn power_off(
             )
         }
     };
-    let (username, password) = match credentials() {
+    let (username, password) = match credentials(&cfg.tapo) {
         Ok(c) => c,
         Err(e) => return e,
     };

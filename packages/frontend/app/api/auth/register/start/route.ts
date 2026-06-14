@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-
-const ENROLLMENT_OPEN = process.env.ENROLLMENT_OPEN === "true";
+import { isEnrollmentOpen } from "@/lib/server-config";
 
 export async function POST(req: NextRequest) {
-	if (!ENROLLMENT_OPEN) {
+	if (!isEnrollmentOpen()) {
 		return new NextResponse(null, { status: 404 });
 	}
 	const { username, password } = await req.json();

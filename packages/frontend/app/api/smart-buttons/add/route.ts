@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getDellservIp } from "@/lib/server-config";
 
 // The ESP32 needs a real routable IP to POST state_change events back to.
-// Set DELLSERV_IP in the environment to the server's LAN IP (e.g. 192.168.1.100).
+// Set server.dellserv_ip in /etc/server-dash/config.toml to the server's LAN IP.
 // Falls back to the IP the Next.js server uses to reach the ESP32.
 async function getCallbackUrl(esp32Ip: string): Promise<string> {
-	const envIp = process.env.DELLSERV_IP;
+	const envIp = getDellservIp();
 	if (envIp) return `http://${envIp}:3001/smart-buttons/callback`;
 
 	// Derive server LAN IP from the outbound interface used to reach the ESP32.

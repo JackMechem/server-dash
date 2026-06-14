@@ -228,7 +228,11 @@ pub async fn delete_automation(
 // ── Automation engine ─────────────────────────────────────────────────────────
 
 /// Execute all actions for a single automation. Returns results per action.
-async fn execute_actions(auto: &Automation, tapo_cache: &TapoDeviceCache) -> Vec<Result<String, String>> {
+async fn execute_actions(
+    auto: &Automation,
+    tapo_cache: &TapoDeviceCache,
+    tapo_cfg: &crate::app_config::TapoConfig,
+) -> Vec<Result<String, String>> {
     let mut results = Vec::new();
     for action in &auto.actions {
         let result = if action.kind == "tapo_power" {
@@ -242,6 +246,7 @@ async fn execute_actions(auto: &Automation, tapo_cache: &TapoDeviceCache) -> Vec
                 tapo_cache,
                 &action.device_name,
                 action.power,
+                tapo_cfg,
             ).await {
                 Ok(()) => Ok(format!(
                     "Tapo '{}' turned {}",
@@ -266,6 +271,7 @@ pub async fn run_automations(
     device_id: String,
     button_name: String,
     new_state: bool,
+    cfg: std::sync::Arc<crate::app_config::Config>,
 ) {
     eprintln!(
         "[automation] checking: device={} button_name={} state={}",
@@ -325,7 +331,7 @@ pub async fn run_automations(
 
     for auto in &matching {
         eprintln!("[automation] executing '{}' ({} action(s)) …", auto.name, auto.actions.len());
-        let results = execute_actions(auto, &tapo_cache).await;
+        let results = execute_actions(auto, &tapo_cache, &cfg.tapo).await;
         let all_ok = results.iter().all(|r| r.is_ok());
         for (i, result) in results.iter().enumerate() {
             match result {
@@ -356,6 +362,7 @@ pub async fn trigger_automation(
     Path(id): Path<String>,
     Extension(store): Extension<AutomationStore>,
     Extension(tapo_cache): Extension<TapoDeviceCache>,
+    Extension(cfg): Extension<std::sync::Arc<crate::app_config::Config>>,
 ) -> impl IntoResponse {
     let auto = {
         let items = store.lock().await;
@@ -370,7 +377,7 @@ pub async fn trigger_automation(
 
     eprintln!("[automation] manual trigger: '{}' ({} action(s))", auto.name, auto.actions.len());
 
-    let results = execute_actions(&auto, &tapo_cache).await;
+    let results = execute_actions(&auto, &tapo_cache, &cfg.tapo).await;
     let messages: Vec<String> = results.iter().filter_map(|r| r.as_ref().ok().cloned()).collect();
     let errors: Vec<String> = results.iter().filter_map(|r| r.as_ref().err().cloned()).collect();
 

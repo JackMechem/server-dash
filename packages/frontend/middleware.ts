@@ -1,23 +1,17 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const ENROLLMENT_OPEN = process.env.ENROLLMENT_OPEN === "true";
-
 export function middleware(req: NextRequest) {
 	const { pathname } = req.nextUrl;
 
-	// Enrollment routes — only accessible when enrollment is open
+	// Always allow login, auth, and enrollment routes.
+	// Enrollment gating is enforced by the API routes (which read /etc/server-dash/config.toml),
+	// not here — middleware runs in the Edge runtime and cannot read the filesystem.
 	if (
-		pathname.startsWith("/enroll") ||
-		pathname.startsWith("/api/auth/register")
+		pathname.startsWith("/auth") ||
+		pathname.startsWith("/api/auth") ||
+		pathname.startsWith("/enroll")
 	) {
-		return ENROLLMENT_OPEN
-			? NextResponse.next()
-			: new NextResponse(null, { status: 404 });
-	}
-
-	// Always allow login page and auth api routes
-	if (pathname.startsWith("/auth") || pathname.startsWith("/api/auth")) {
 		return NextResponse.next();
 	}
 

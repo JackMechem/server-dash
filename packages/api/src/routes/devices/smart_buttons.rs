@@ -91,6 +91,7 @@ pub async fn post_callback(
     Extension(broadcaster): Extension<SmartButtonBroadcast>,
     Extension(automation_store): Extension<crate::routes::devices::automations::AutomationStore>,
     Extension(tapo_cache): Extension<crate::routes::devices::tapo::TapoDeviceCache>,
+    Extension(cfg): Extension<Arc<crate::app_config::Config>>,
     Json(payload): Json<CallbackPayload>,
 ) -> impl IntoResponse {
     let mut devices = store.lock().await;
@@ -146,6 +147,7 @@ pub async fn post_callback(
                 // Fire automations asynchronously — don't block the callback response.
                 let auto_store = automation_store.clone();
                 let tapo = tapo_cache.clone();
+                let cfg_clone = Arc::clone(&cfg);
                 let dev_id = payload.device_id.clone();
                 // Prefer the name the ESP32 sends. If absent, look it up from the
                 // stored device buttons (set via /rename). Last resort: "button_{n}".
@@ -158,7 +160,7 @@ pub async fn post_callback(
                 });
                 tokio::spawn(async move {
                     crate::routes::devices::automations::run_automations(
-                        auto_store, tapo, dev_id, btn_name, enabled,
+                        auto_store, tapo, dev_id, btn_name, enabled, cfg_clone,
                     ).await;
                 });
             }

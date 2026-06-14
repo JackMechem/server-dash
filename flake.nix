@@ -71,8 +71,7 @@
                     LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
                     BINDGEN_EXTRA_CLANG_ARGS = "-I${pkgs.linux-pam}/include -I${pkgs.glibc.dev}/include";
                     RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
-                    TAPO_USERNAME = "mechemjack@gmail.com";
-                    TAPO_PASSWORD = "Jackkcaj123$";
+
                     NIX_DEV_SHELL = "api";
                     shellHook = ''
                         echo "server-dash-api dev shell ready"
@@ -90,8 +89,7 @@
                     LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
                     BINDGEN_EXTRA_CLANG_ARGS = "-I${pkgs.linux-pam}/include -I${pkgs.glibc.dev}/include";
                     RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
-                    TAPO_USERNAME = "mechemjack@gmail.com";
-                    TAPO_PASSWORD = "Jackkcaj123$";
+
                     NIX_DEV_SHELL = "dev";
                     shellHook = ''
                         REPO_ROOT=$(pwd)
@@ -150,7 +148,6 @@
                                 ExecStart = "${pkgs.nodejs}/bin/node ${config.services.server-dash.package}/packages/frontend/server.js";
                                 Restart = "on-failure";
                                 RestartSec = "10s";
-                                EnvironmentFile = "/var/lib/server-dash/.env";
                                 Environment = [
                                     "PORT=3000"
                                     "HOSTNAME=127.0.0.1"
@@ -192,6 +189,9 @@
                             "d /var/lib/server-dash-api 0750 server-dash-api server-dash-api -"
                             "d /var/lib/server-dash-api/webauthn-credentials 0750 server-dash-api server-dash-api -"
                             "d /var/lib/server-dash-api/totp 0750 server-dash-api server-dash-api -"
+                            # Config dir: owned by api so it can create the file on first run,
+                            # world-readable so the frontend service can also read config.toml.
+                            "d /etc/server-dash 0755 server-dash-api server-dash-api -"
                         ];
 
                         security.pam.services.server-dash-api = { };
@@ -235,8 +235,6 @@
                                 Environment = [
                                     "RUST_LOG=info"
                                     "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
-                                    "TAPO_USERNAME=mechemjack@gmail.com"
-                                    "TAPO_PASSWORD=Jackkcaj123$"
                                 ];
                                 AmbientCapabilities = [ "CAP_DAC_READ_SEARCH" ];
                                 CapabilityBoundingSet = [ "CAP_DAC_READ_SEARCH" ];
