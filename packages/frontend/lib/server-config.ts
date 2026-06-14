@@ -38,6 +38,10 @@ export function isEnrollmentOpen(): boolean {
 	return loadConfig().features?.enrollment_open ?? false;
 }
 
+export function isTapoEnabled(): boolean {
+	return loadConfig().features?.tapo ?? true;
+}
+
 export function getDellservIp(): string | undefined {
 	return loadConfig().server?.dellserv_ip;
 }

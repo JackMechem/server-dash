@@ -2,7 +2,8 @@
 
 import React, { useState, useRef, useEffect, lazy, Suspense } from "react";
 import { createPortal } from "react-dom";
-import { LeafNode, PanelId, PANEL_LABELS, PANEL_SECTIONS } from "./types";
+import { LeafNode, PanelId, PANEL_LABELS, getVisibleSections } from "./types";
+import { useFeatures } from "@/app/lib/DataProvider";
 import {
 	IconX, IconLayoutColumns, IconLayoutRows, IconRefresh,
 } from "@tabler/icons-react";
@@ -56,6 +57,8 @@ function ViewPickerPortal({
 	const menuRef = useRef<HTMLDivElement>(null);
 	const [pos, setPos] = useState({ top: mouseY + 8, left: mouseX });
 	const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
+	const { tapo } = useFeatures();
+	const visibleSections = getVisibleSections(tapo);
 
 	// Clamp to viewport after mount
 	useEffect(() => {
@@ -110,7 +113,7 @@ function ViewPickerPortal({
 				<span className={iconCls(dashboardActive)}>D</span>
 				Dashboard
 			</button>
-			{PANEL_SECTIONS.map((section) => (
+			{visibleSections.map((section) => (
 				<div key={section.id}>
 					<div className="mx-2 my-1 h-px bg-secondary" />
 					<p className={isMobile ? "px-4 pt-1.5 pb-1 text-[11px] font-semibold text-foreground-sec/60" : "px-3 pt-1 pb-0.5 text-[11px] font-semibold text-foreground-sec/60"}>

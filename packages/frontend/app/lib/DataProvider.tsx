@@ -23,21 +23,39 @@ interface PowerCtx {
 	power: PowerData | null;
 }
 
-const StatsContext = createContext<StatsCtx>({ stats: null, netSpeed: null, iface: null });
-const PowerContext = createContext<PowerCtx>({ power: null });
+export interface Features {
+	tapo: boolean;
+}
 
-export function useStats() { return useContext(StatsContext); }
-export function usePower() { return useContext(PowerContext); }
+const StatsContext   = createContext<StatsCtx>({ stats: null, netSpeed: null, iface: null });
+const PowerContext   = createContext<PowerCtx>({ power: null });
+const FeaturesContext = createContext<Features>({ tapo: true });
+
+export function useStats()    { return useContext(StatsContext); }
+export function usePower()    { return useContext(PowerContext); }
+export function useFeatures() { return useContext(FeaturesContext); }
 
 export function DataProvider({ children }: { children: ReactNode }) {
-	const [stats, setStats] = useState<Stats | null>(null);
+	const [stats, setStats]       = useState<Stats | null>(null);
 	const [netSpeed, setNetSpeed] = useState<NetSpeed | null>(null);
-	const [iface, setIface] = useState<string | null>(null);
-	const prevNetRef = useRef<Record<string, { rx: number; tx: number }> | null>(null);
-	const lastFetchRef = useRef<number>(0);
+	const [iface, setIface]       = useState<string | null>(null);
+	const prevNetRef              = useRef<Record<string, { rx: number; tx: number }> | null>(null);
+	const lastFetchRef            = useRef<number>(0);
 
-	const [power, setPower] = useState<PowerData | null>(null);
+	const [power, setPower]       = useState<PowerData | null>(null);
+	const [features, setFeatures] = useState<Features | null>(null);
 
+	// Resolve feature flags from the server config.
+	// Defaults to { tapo: true } on error so the UI is fully functional
+	// even if the config can't be read.
+	useEffect(() => {
+		fetch("/api/features")
+			.then(r => r.ok ? r.json() : null)
+			.then(d => { if (d) setFeatures(d); })
+			.catch(() => { setFeatures({ tapo: true }); });
+	}, []);
+
+	// Stats polling
 	useEffect(() => {
 		const fetchStats = async () => {
 			try {
@@ -70,7 +88,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
 		return () => clearInterval(id);
 	}, []);
 
+	// Power SSE — only connect when features are loaded and Tapo is enabled.
 	useEffect(() => {
+		if (features === null || !features.tapo) return;
+
 		// Seed with a REST snapshot so there's data immediately on mount,
 		// then switch to the SSE stream for zero-request push updates.
 		fetch("/api/power").then(r => r.ok ? r.json() : null).then(d => { if (d) setPower(d); }).catch(() => {});
@@ -79,15 +100,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
 		es.onmessage = (e) => {
 			try { setPower(JSON.parse(e.data)); } catch {}
 		};
-		// EventSource reconnects automatically on error — no extra handling needed.
 		return () => es.close();
-	}, []);
+	}, [features?.tapo]);
 
 	return (
-		<StatsContext.Provider value={{ stats, netSpeed, iface }}>
-			<PowerContext.Provider value={{ power }}>
-				{children}
-			</PowerContext.Provider>
-		</StatsContext.Provider>
+		<FeaturesContext.Provider value={features ?? { tapo: true }}>
+			<StatsContext.Provider value={{ stats, netSpeed, iface }}>
+				<PowerContext.Provider value={{ power }}>
+					{children}
+				</PowerContext.Provider>
+			</StatsContext.Provider>
+		</FeaturesContext.Provider>
 	);
 }

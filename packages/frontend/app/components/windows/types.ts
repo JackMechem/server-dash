@@ -54,6 +54,17 @@ export const PANEL_SECTIONS: PanelSection[] = [
 
 export const ALL_PANELS: PanelId[] = Object.keys(PANEL_LABELS) as PanelId[];
 
+export function getVisibleSections(tapo: boolean): PanelSection[] {
+	if (tapo) return PANEL_SECTIONS;
+	return PANEL_SECTIONS
+		.filter((s) => s.id !== "power-analytics")
+		.map((s) =>
+			s.id === "devices"
+				? { ...s, items: s.items.filter((i) => i.panelId !== "devices-tapo") }
+				: s,
+		);
+}
+
 // ── N-ary pane tree ───────────────────────────────────────────────────────────
 
 export type LeafNode = { type: "leaf"; id: string; panelId: PanelId };

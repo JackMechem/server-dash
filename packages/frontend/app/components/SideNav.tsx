@@ -15,7 +15,8 @@ import { createPortal } from "react-dom";
 import { useHelpMode, useToggleHelpMode } from "@/stores/helpModeStore";
 import HelpTooltip from "./HelpTooltip";
 import { useFocusedWindowState, requestViewChange } from "@/stores/windowStore";
-import { PANEL_SECTIONS, type PanelId } from "@/app/components/windows/types";
+import { PANEL_SECTIONS, getVisibleSections, type PanelId } from "@/app/components/windows/types";
+import { useFeatures } from "@/app/lib/DataProvider";
 import { SideNavWidgets } from "./SideNavWidgets";
 import { ExportDrawer } from "./AppMenubar";
 
@@ -49,6 +50,8 @@ interface SideNavProps {
 // ── Window nav (only shown on /) ──────────────────────────────────────────────
 
 function WindowNav({ collapsed, focusedPanelId }: { collapsed: boolean; focusedPanelId: PanelId | null }) {
+	const { tapo } = useFeatures();
+	const visibleSections = getVisibleSections(tapo);
 	const [openSections, setOpenSections] = useState<Set<string>>(
 		new Set(PANEL_SECTIONS.map((s) => s.id))
 	);
@@ -76,7 +79,7 @@ function WindowNav({ collapsed, focusedPanelId }: { collapsed: boolean; focusedP
 				>
 					<IconHome2 size={15} strokeWidth={focusedPanelId === "dashboard" ? 2.5 : 2} className="shrink-0" />
 				</button>
-				{PANEL_SECTIONS.flatMap((s) =>
+				{visibleSections.flatMap((s) =>
 					s.items.map(({ panelId, label }) => {
 						const Icon = ANALYTICS_ICONS[panelId];
 						const active = focusedPanelId === panelId;
@@ -118,7 +121,7 @@ function WindowNav({ collapsed, focusedPanelId }: { collapsed: boolean; focusedP
 				</button>
 			</HelpTooltip>
 
-			{PANEL_SECTIONS.map((section) => {
+			{visibleSections.map((section) => {
 				const SectionIcon = SECTION_ICONS[section.id] ?? IconBolt;
 				const isOpen = openSections.has(section.id);
 
@@ -193,6 +196,8 @@ const SideNav = ({ online, isAuthed, devConsoleOpen, onToggleDevConsole }: SideN
 	const wrapperRef = useRef<HTMLDivElement>(null);
 
 	const { panelId: focusedPanelId } = useFocusedWindowState();
+	const { tapo } = useFeatures();
+	const visibleSections = getVisibleSections(tapo);
 	const isHome = pathname === "/";
 
 	useEffect(() => { setMenuOpen(false); }, [pathname]);
@@ -570,7 +575,7 @@ const SideNav = ({ online, isAuthed, devConsoleOpen, onToggleDevConsole }: SideN
 									</button>
 								</HelpTooltip>
 								{/* Sections */}
-								{PANEL_SECTIONS.map((section) => (
+								{visibleSections.map((section) => (
 									<div key={section.id} className="mb-1 mt-2">
 										<p className="px-[10px] py-[4px] text-[11px] font-semibold text-foreground-sec/60">
 											{section.label}
