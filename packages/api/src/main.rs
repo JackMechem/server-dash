@@ -68,6 +68,31 @@ async fn main() {
     let (sb_tx, _) = broadcast::channel(32);
     let smart_button_broadcast: routes::devices::smart_buttons::SmartButtonBroadcast = Arc::new(sb_tx);
 
+    // Background: scan for JMIoT devices, then re-scan every 5 minutes.
+    {
+        let store = Arc::clone(&smart_button_store);
+        let bcast = Arc::clone(&smart_button_broadcast);
+        let cfg2  = Arc::clone(&cfg);
+        tokio::spawn(async move {
+            tokio::time::sleep(tokio::time::Duration::from_secs(15)).await;
+            loop {
+                routes::devices::smart_buttons::scan_and_register(
+                    Arc::clone(&store), Arc::clone(&bcast), Arc::clone(&cfg2),
+                ).await;
+                tokio::time::sleep(tokio::time::Duration::from_secs(300)).await;
+            }
+        });
+    }
+
+    // Background: mark devices offline when their heartbeat stops.
+    {
+        let store = Arc::clone(&smart_button_store);
+        let bcast = Arc::clone(&smart_button_broadcast);
+        tokio::spawn(async move {
+            routes::devices::smart_buttons::run_health_check(store, bcast).await;
+        });
+    }
+
     let automation_store: routes::devices::automations::AutomationStore =
         Arc::new(Mutex::new(routes::devices::automations::load_store()));
 
@@ -163,6 +188,7 @@ async fn main() {
         .route("/system/shutdown", post(routes::system::system_shutdown))
         .route("/smart-buttons", get(routes::devices::smart_buttons::get_buttons))
         .route("/smart-buttons/stream", get(routes::devices::smart_buttons::get_stream))
+        .route("/smart-buttons/scan", post(routes::devices::smart_buttons::post_scan))
         .route("/smart-buttons/{id}/set", post(routes::devices::smart_buttons::post_set))
         .route("/smart-buttons/{id}/rename", post(routes::devices::smart_buttons::post_rename))
         .route("/smart-buttons/{id}", delete(routes::devices::smart_buttons::delete_button))

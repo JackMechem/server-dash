@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 
 export interface ButtonState { button: number; enabled: boolean; uptime_s: number; name?: string; }
-export interface SmartButton { device_id: string; ip: string; name: string; device_name?: string; buttons: ButtonState[]; registered_at: string; last_seen: string; }
+export interface SmartButton { device_id: string; ip: string; name: string; device_name?: string; buttons: ButtonState[]; registered_at: string; last_seen: string; online?: boolean; }
 
 export function useSmartButtons() {
 	const [devices, setDevices] = useState<SmartButton[]>([]);

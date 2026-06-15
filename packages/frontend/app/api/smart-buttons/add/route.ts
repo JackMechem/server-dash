@@ -47,8 +47,8 @@ export async function POST(req: NextRequest) {
 		);
 	}
 
-	if (info.type !== "smart_button") {
-		return NextResponse.json({ error: "Device is not a smart button." }, { status: 400 });
+	if (info.type !== "jmthing") {
+		return NextResponse.json({ error: "Device is not a JMIoT device." }, { status: 400 });
 	}
 
 	// 2. Determine the callback URL the ESP32 will use for future pushes

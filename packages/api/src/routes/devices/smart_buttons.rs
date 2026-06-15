@@ -29,7 +29,11 @@ pub struct SmartButton {
     pub buttons: Vec<ButtonState>,
     pub registered_at: String,
     pub last_seen: String,
+    #[serde(default = "default_online")]
+    pub online: bool,
 }
+
+fn default_online() -> bool { true }
 
 pub type SmartButtonStore = Arc<Mutex<Vec<SmartButton>>>;
 pub type SmartButtonBroadcast = Arc<broadcast::Sender<Vec<SmartButton>>>;
@@ -112,6 +116,7 @@ pub async fn post_callback(
 
             if let Some(dev) = devices.iter_mut().find(|d| d.device_id == payload.device_id) {
                 dev.ip = payload.ip;
+                dev.online = true;
                 for new_btn in &buttons {
                     if let Some(existing) = dev.buttons.iter_mut().find(|b| b.button == new_btn.button) {
                         existing.enabled = new_btn.enabled;
@@ -135,6 +140,7 @@ pub async fn post_callback(
                     buttons,
                     registered_at: now.clone(),
                     last_seen: now,
+                    online: true,
                 });
             }
         }
@@ -166,6 +172,7 @@ pub async fn post_callback(
             }
             if let Some(dev) = devices.iter_mut().find(|d| d.device_id == payload.device_id) {
                 dev.ip = payload.ip;
+                dev.online = true;
                 dev.last_seen = now;
                 if let (Some(btn), Some(enabled)) = (payload.button, payload.enabled) {
                     if let Some(b) = dev.buttons.iter_mut().find(|b| b.button == btn) {
@@ -339,4 +346,164 @@ pub async fn post_rename(
     save_store(&devices);
     let _ = broadcaster.send(devices.clone());
     (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response()
+}
+
+// ── Network scanning ──────────────────────────────────────────────────────────
+
+fn get_local_ip() -> Option<String> {
+    let s = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
+    s.connect("8.8.8.8:80").ok()?;
+    Some(s.local_addr().ok()?.ip().to_string())
+}
+
+fn scan_subnet(cfg: &crate::app_config::Config) -> Option<String> {
+    if let Some(s) = &cfg.tapo.subnet {
+        if !s.is_empty() { return Some(s.clone()); }
+    }
+    let ip = get_local_ip()?;
+    let parts: Vec<&str> = ip.split('.').collect();
+    if parts.len() == 4 { Some(format!("{}.{}.{}", parts[0], parts[1], parts[2])) } else { None }
+}
+
+fn callback_url(cfg: &crate::app_config::Config) -> String {
+    let ip = cfg.server.dellserv_ip.clone()
+        .unwrap_or_else(|| get_local_ip().unwrap_or_else(|| "127.0.0.1".to_string()));
+    format!("http://{}:3001/smart-buttons/callback", ip)
+}
+
+/// Scans the local subnet for JMIoT devices and (re-)registers the callback URL
+/// with any that are new or have gone offline.
+pub async fn scan_and_register(
+    store: SmartButtonStore,
+    broadcaster: SmartButtonBroadcast,
+    cfg: Arc<crate::app_config::Config>,
+) {
+    let Some(subnet) = scan_subnet(&cfg) else {
+        eprintln!("[jmiot-scan] Could not determine subnet");
+        return;
+    };
+    let cb_url = callback_url(&cfg);
+    println!("[jmiot-scan] Scanning {}.1-254...", subnet);
+
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_millis(500))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => { eprintln!("[jmiot-scan] Client build error: {}", e); return; }
+    };
+
+    // Spawn a probe for every host concurrently.
+    let mut handles = Vec::with_capacity(254);
+    for i in 1u16..=254 {
+        let url = format!("http://{}.{}/api/info", subnet, i);
+        let c = client.clone();
+        handles.push(tokio::spawn(async move {
+            match c.get(&url).send().await {
+                Ok(r) if r.status().is_success() => r.json::<serde_json::Value>().await.ok(),
+                _ => None,
+            }
+        }));
+    }
+
+    let mut found = 0u32;
+    for handle in handles {
+        let Ok(Some(info)) = handle.await else { continue };
+        if info["type"].as_str() != Some("jmthing") { continue; }
+
+        let device_id = match info["device_id"].as_str().filter(|s| !s.is_empty()) {
+            Some(s) => s.to_string(),
+            None => continue,
+        };
+        let ip = match info["ip"].as_str().filter(|s| !s.is_empty()) {
+            Some(s) => s.to_string(),
+            None => continue,
+        };
+        found += 1;
+
+        // Determine whether this device needs (re-)registration.
+        let needs_register = {
+            let devices = store.lock().await;
+            match devices.iter().find(|d| d.device_id == device_id) {
+                None => true,       // unknown device
+                Some(d) => !d.online, // known but currently marked offline
+            }
+        };
+
+        if needs_register {
+            println!("[jmiot-scan] Registering {} at {}", device_id, ip);
+            let reg_url = format!("http://{}/register", ip);
+            let _ = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(5))
+                .build()
+                .unwrap_or_default()
+                .post(&reg_url)
+                .json(&serde_json::json!({ "callback_url": cb_url }))
+                .send()
+                .await;
+        } else {
+            // Keep the stored IP fresh even when registration isn't needed.
+            let ip_stale = {
+                let devices = store.lock().await;
+                devices.iter().find(|d| d.device_id == device_id)
+                    .map(|d| d.ip != ip)
+                    .unwrap_or(false)
+            };
+            if ip_stale {
+                println!("[jmiot-scan] IP updated for {}: {}", device_id, ip);
+                let mut devices = store.lock().await;
+                if let Some(dev) = devices.iter_mut().find(|d| d.device_id == device_id) {
+                    dev.ip = ip;
+                }
+                save_store(&devices);
+                let _ = broadcaster.send(devices.clone());
+            }
+        }
+    }
+
+    println!("[jmiot-scan] Done — {} JMIoT device(s) found.", found);
+}
+
+// ── POST /smart-buttons/scan  (protected) ─────────────────────────────────────
+pub async fn post_scan(
+    Extension(store): Extension<SmartButtonStore>,
+    Extension(broadcaster): Extension<SmartButtonBroadcast>,
+    Extension(cfg): Extension<Arc<crate::app_config::Config>>,
+) -> impl IntoResponse {
+    let store = Arc::clone(&store);
+    let broadcaster = Arc::clone(&broadcaster);
+    let cfg = Arc::clone(&cfg);
+    tokio::spawn(async move {
+        scan_and_register(store, broadcaster, cfg).await;
+    });
+    (StatusCode::OK, Json(serde_json::json!({ "ok": true, "message": "scan started" }))).into_response()
+}
+
+// ── Background health-check ───────────────────────────────────────────────────
+/// Marks devices offline when no callback has arrived for 3 minutes.
+/// The ESP32 heartbeat fires every 60 s, so 3 min = 3 missed beats.
+pub async fn run_health_check(store: SmartButtonStore, broadcaster: SmartButtonBroadcast) {
+    loop {
+        tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+
+        let mut devices = store.lock().await;
+        let now = chrono::Utc::now();
+        let mut changed = false;
+
+        for dev in devices.iter_mut() {
+            if let Ok(last) = chrono::DateTime::parse_from_rfc3339(&dev.last_seen) {
+                let age = (now - last.with_timezone(&chrono::Utc)).num_seconds();
+                let should_be_online = age < 180;
+                if dev.online != should_be_online {
+                    dev.online = should_be_online;
+                    changed = true;
+                }
+            }
+        }
+
+        if changed {
+            save_store(&devices);
+            let _ = broadcaster.send(devices.clone());
+        }
+    }
 }

@@ -173,6 +173,7 @@ function SmartButtonCard({
 
 	const anyOn = device.buttons.some(b => b.enabled);
 	const displayName = device.device_name ?? device.name;
+	const isOnline = device.online !== false;
 
 	return (
 		<div style={{
@@ -181,6 +182,7 @@ function SmartButtonCard({
 			background: "var(--color-primary)",
 			overflow: "hidden",
 			transition: "border-color 200ms",
+			opacity: isOnline ? 1 : 0.6,
 		}}>
 			{/* Header */}
 			<div style={{
@@ -199,8 +201,9 @@ function SmartButtonCard({
 							onSave={name => sendRename({ device_name: name })}
 						/>
 					</div>
-					<p style={{ fontSize: "8.5pt", color: "var(--color-foreground-sec)", margin: 0, fontFamily: "monospace", opacity: 0.8 }}>
-						{device.ip}
+					<p style={{ fontSize: "8.5pt", color: "var(--color-foreground-sec)", margin: 0, fontFamily: "monospace", opacity: 0.8, display: "flex", alignItems: "center", gap: 5 }}>
+						<span style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: isOnline ? "#5dd776" : "#7b899a", display: "inline-block" }} />
+						{isOnline ? device.ip : "offline"}
 					</p>
 				</div>
 				<button
@@ -360,6 +363,7 @@ export default function SmartButtonsPanel() {
 	const { devices, reload } = useSmartButtons();
 	const [loading, setLoading] = useState(true);
 	const [showAdd, setShowAdd] = useState(false);
+	const [scanning, setScanning] = useState(false);
 
 	useEffect(() => { if (devices.length >= 0) setLoading(false); }, [devices]);
 
@@ -375,6 +379,15 @@ export default function SmartButtonsPanel() {
 		await fetch(`/api/smart-buttons/${id}`, { method: "DELETE" });
 	};
 
+	const handleScan = async () => {
+		setScanning(true);
+		await fetch("/api/smart-buttons/scan", { method: "POST" });
+		// Wait a few seconds for the scan + ESP32 handshake, then refresh
+		await new Promise(res => setTimeout(res, 4000));
+		await reload();
+		setScanning(false);
+	};
+
 	return (
 		<div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
 			<div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -384,12 +397,21 @@ export default function SmartButtonsPanel() {
 						{devices.length} device{devices.length !== 1 ? "s" : ""} registered
 					</p>
 				</div>
-				<button
-					onClick={() => setShowAdd(true)}
-					style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid color-mix(in srgb, var(--color-blue) 50%, transparent)", background: "color-mix(in srgb, var(--color-blue) 12%, transparent)", color: "var(--color-blue)", fontSize: "10pt", fontWeight: 600, cursor: "pointer" }}
-				>
-					+ Add Device
-				</button>
+				<div style={{ display: "flex", gap: 8 }}>
+					<button
+						onClick={handleScan}
+						disabled={scanning}
+						style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid var(--color-secondary)", background: "transparent", color: "var(--color-foreground-sec)", fontSize: "10pt", fontWeight: 600, cursor: scanning ? "default" : "pointer", opacity: scanning ? 0.5 : 1 }}
+					>
+						{scanning ? "Scanning..." : "Scan Network"}
+					</button>
+					<button
+						onClick={() => setShowAdd(true)}
+						style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid color-mix(in srgb, var(--color-blue) 50%, transparent)", background: "color-mix(in srgb, var(--color-blue) 12%, transparent)", color: "var(--color-blue)", fontSize: "10pt", fontWeight: 600, cursor: "pointer" }}
+					>
+						+ Add Device
+					</button>
+				</div>
 			</div>
 
 			{loading && <p style={{ fontSize: "9.5pt", color: "var(--color-foreground-sec)" }}>Loading...</p>}
